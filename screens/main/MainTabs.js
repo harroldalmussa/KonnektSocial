@@ -3,13 +3,14 @@
 // 1. Import necessary React and React Native components and hooks
 import React from 'react';
 import {
-  Dimensions, // Potentially useful for dynamic sizing, though not strictly used in final tabBarStyle
-  Platform,   // IMPORTANT: Added for correct rendering
+  Dimensions,
+  Platform,
   SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  useColorScheme,
 } from 'react-native';
 
 // 2. Import React Navigation components
@@ -24,31 +25,32 @@ import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from './HomeScreen';
 import ChatListScreen from './ChatListScreen';
 import ProfileScreen from './ProfileScreen';
-import ChatWindowScreen from './ChatWindowScreen'; // Screen to navigate to from ChatListScreen
 
 // Initialize the main Tab Navigator
 const Tab = createBottomTabNavigator();
 
 // Initialize a Stack Navigator specifically for the Chat flow
-// This allows you to navigate from ChatListScreen to ChatWindowScreen within the Chat tab
 const ChatStack = createNativeStackNavigator();
 
 function ChatFlow() {
   return (
     <ChatStack.Navigator screenOptions={{ headerShown: false }}>
       <ChatStack.Screen name="ChatList" component={ChatListScreen} />
-      <ChatStack.Screen name="ChatWindow" component={ChatWindowScreen} />
     </ChatStack.Navigator>
   );
 }
 
 // Main component for the bottom tab navigation
 export default function MainTabs() {
+  const colorScheme = useColorScheme();
+
+  const tabBackgroundColor = colorScheme === 'dark' ? 'rgba(45, 55, 72, 0.9)' : 'rgba(255, 255, 255, 0.9)';
+  const inactiveTintColor = colorScheme === 'dark' ? '#cbd5e0' : 'gray';
+
   return (
     <Tab.Navigator
-      initialRouteName="Home" // Sets the initial active tab to Profile
+      initialRouteName="Home"
       screenOptions={({ route }) => ({
-        // Function to define the icon for each tab
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
@@ -59,43 +61,38 @@ export default function MainTabs() {
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           }
-          // Returns an Ionicons component for the tab icon
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return <Ionicons name={iconName} size={25} color={color} />;
         },
-        // Styling for the tab bar items and labels
-        tabBarActiveTintColor: '#3b82f6', // Active tab color (blue-500 equivalent)
-        tabBarInactiveTintColor: 'gray', // Inactive tab color
-        headerShown: false, // Hides the header bar for individual screens within the tab navigator
+        tabBarActiveTintColor: '#5b4285',
+        tabBarInactiveTintColor: inactiveTintColor,
+        headerShown: false,
         tabBarStyle: {
-          // Styles for the entire tab bar container to make it floating and rounded
-          backgroundColor: 'rgba(52, 52, 52, 0.9)', // Dark background with transparency (zinc-800)
-          position: 'absolute', // Makes it float over content
-          bottom: 25, // Lift it from the bottom edge
-          left: 30, // Margin from the left side
-          right: 30, // Margin from the right side
-          borderRadius: 999, // High border-radius for a pill shape (rounded-full)
-          height: 65, // Fixed height for the tab bar
-          paddingBottom: 0, // Adjust padding at the bottom (useful for iOS safe area)
-          shadowColor: '#000', // Shadow for floating effect
+          backgroundColor: tabBackgroundColor,
+          position: 'absolute',
+          bottom: 30,
+          marginHorizontal: 15, 
+          borderRadius: 999,
+          height: 65,
+          paddingBottom: 0,
+          shadowColor: '#000',
           shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
+          shadowOpacity: 0.2,
           shadowRadius: 5,
-          elevation: 8, // Android shadow property
+          elevation: 8,
         },
         tabBarLabelStyle: {
-          // Styles for the text label below the icon
           fontSize: 12,
-          marginBottom: Platform.OS === 'ios' ? 0 : 5, // Using Platform.OS here
+          marginBottom: Platform.OS === 'ios' ? 0 : 5,
         },
         tabBarItemStyle: {
-          // Styles for each individual tab item (Home, Chat, Profile)
-          paddingVertical: 5, // Add some vertical padding inside each tab item
+          paddingVertical: 5,
+          justifyContent: 'center',
+          alignItems: 'center',
+          flex: 1, // This is crucial for even spacing and letting margins constrain width
         },
       })}
     >
-      {/* Define each screen that belongs to a tab */}
       <Tab.Screen name="Home" component={HomeScreen} />
-      {/* The Chat tab now renders our ChatFlow (nested Stack Navigator) */}
       <Tab.Screen name="Chat" component={ChatFlow} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
@@ -103,6 +100,5 @@ export default function MainTabs() {
 }
 
 const styles = StyleSheet.create({
-  // This StyleSheet can be empty or contain other common styles if needed by children
-  // For this specific file, most styles are inline in screenOptions.
+  // Most styles are inline for tab bar options
 });
