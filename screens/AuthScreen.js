@@ -1,5 +1,5 @@
 // screens/AuthScreen.js
-import React, { useState } from 'react';
+import React, { useState, useEffect, useContext } from 'react'; // Add useContext
 import {
   StyleSheet,
   Text,
@@ -10,9 +10,17 @@ import {
   Image,
   Alert,
   useColorScheme,
-  Platform, 
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+
+import { AuthContext } from './navigation/AppNavigator'; // Import AuthContext
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthScreen() {
   const [showEmailLogin, setShowEmailLogin] = useState(false);
@@ -24,20 +32,78 @@ export default function AuthScreen() {
   const navigation = useNavigation();
   const colorScheme = useColorScheme();
 
-  // Determine styles based on color scheme
-  const cardBackgroundColor = colorScheme === 'dark' ? 'rgba(45, 55, 72, 0.9)' : 'rgba(255, 255, 255, 0.9)';
+  const { signIn } = useContext(AuthContext); // Access signIn function from AuthContext
+
   const titleColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937';
-  const descriptionColor = colorScheme === 'dark' ? '#e2e8f0' : '#374151';
-  const privacyTextColor = colorScheme === 'dark' ? '#cbd5e0' : '#4b5563';
+  const descriptionColor = colorScheme === 'dark' ? '#cbd5e0' : '#374151';
+  const privacyTextColor = colorScheme === 'dark' ? '#a0aec0' : '#4b5563';
   const labelColor = colorScheme === 'dark' ? '#e2e8f0' : '#374151';
-  const inputBackgroundColor = colorScheme === 'dark' ? 'rgba(74, 85, 104, 0.7)' : 'rgba(255, 255, 255, 0.7)';
+  const inputBackgroundColor = colorScheme === 'dark' ? 'rgba(74, 85, 104, 0.7)' : 'white';
   const inputBorderColor = colorScheme === 'dark' ? '#4a5568' : '#d1d5db';
-  const inputTextColor = colorScheme === 'dark' ? '#e2e8f0' : '#374151';
+  const inputTextColor = colorScheme === 'dark' ? '#e2e8f0' : '#1f2937';
   const errorTextColor = colorScheme === 'dark' ? '#fca5a5' : '#ef4444';
   const registerTextColor = colorScheme === 'dark' ? '#cbd5e0' : '#4b5563';
-  const registerLinkColor = colorScheme === 'dark' ? '#93c5fd' : '#3b82f6';
+  const registerLinkColor = colorScheme === 'dark' ? '#93c5fd' : '#61469B';
   const dividerColor = colorScheme === 'dark' ? '#4a5568' : '#d1d5db';
+  const buttonPrimaryColor = '#61469B';
 
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: 'YOUR_ANDROID_CLIENT_ID_FROM_GOOGLE_CLOUD_CONSOLE',
+    iosClientId: 'YOUR_IOS_CLIENT_ID_FROM_GOOGLE_CLOUD_CONSOLE',
+    webClientId: 'YOUR_WEB_CLIENT_ID_FROM_GOOGLE_CLOUD_CONSOLE',
+  });
+
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { authentication } = response;
+      console.log('Google Auth Success:', authentication);
+      handleGoogleAuthBackend(authentication.accessToken || authentication.idToken, authentication.type);
+    } else if (response?.type === 'cancel') {
+      Alert.alert('Google Sign-In Cancelled', 'You cancelled the sign-in process.');
+    } else if (response?.type === 'error') {
+      console.error('Google Sign-In Error:', response.error);
+      Alert.alert('Google Sign-In Error', `An error occurred: ${response.error?.message || 'Unknown error'}`);
+    }
+  }, [response]);
+
+  const handleGoogleAuthBackend = async (token, tokenType) => {
+    try {
+      const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174';
+
+      const backendResponse = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:3000/users/google-login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          token: token,
+          tokenType: tokenType,
+        }),
+      });
+
+      const data = await backendResponse.json();
+
+      if (backendResponse.ok) {
+        if (data.access_token) {
+          // Use signIn from AuthContext to update the token and user data
+          await signIn(data.access_token, data.user);
+        } else {
+          console.warn("Google login successful but no access_token received from server.");
+          Alert.alert('Login Warning', 'Could not retrieve session token. Please try logging in again.');
+          return;
+        }
+
+        Alert.alert('Success', 'Google Sign-In successful!');
+        console.log("Google Login: AsyncStorage updated, AppNavigator will handle the transition.");
+      } else {
+        console.error('Google Login error:', data);
+        Alert.alert('Google Login Failed', data.detail || 'An unexpected error occurred during Google login.');
+      }
+    } catch (error) {
+      console.error('Network or API Error during Google Auth Backend Call:', error);
+      Alert.alert('Error', `Network or API Error: ${error.message || 'Unknown error'}. Ensure backend is running and IP is correct.`);
+    }
+  };
 
   const handleEmailLogin = async () => {
     let isValid = true;
@@ -63,7 +129,7 @@ export default function AuthScreen() {
       try {
         const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174';
 
-        const response = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:8081/users/login`, {
+        const response = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:3000/users/login`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -77,117 +143,131 @@ export default function AuthScreen() {
         const data = await response.json();
 
         if (response.ok) {
-          console.log('Login successful:', data);
+          if (data.access_token) {
+            // Use signIn from AuthContext to update the token and user data
+            await signIn(data.access_token, data.user);
+          } else {
+            console.warn("Login successful but no access_token received from server.");
+            Alert.alert('Login Warning', 'Could not retrieve session token. Please try logging in again.');
+            return;
+          }
+
           Alert.alert('Success', 'Login successful!');
-          navigation.replace('Main');
+          console.log("Email Login: AsyncStorage updated, AppNavigator will handle the transition.");
         } else {
           console.error('Login error:', data);
           Alert.alert('Login Failed', data.detail || 'An unexpected error occurred.');
         }
       } catch (error) {
         console.error('Network or API Error:', error);
-        Alert.alert('Error', 'An error occurred during login. Please try again.');
+        Alert.alert('Error', `Network or API Error: ${error.message || 'Unknown error'}. Ensure backend is running and IP is correct.`);
       }
     }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={[styles.authCard, { backgroundColor: cardBackgroundColor }]}>
-          {/* Welcome Section */}
-          {!showEmailLogin && (
-            <>
-              <View style={styles.imageContainer}>
-                <Image source={require('../assets/razom-logo.png')} style={styles.razomLogo} />
-              </View>
-              <View style={styles.textContainer}>
-                <Text style={[styles.title, { color: titleColor }]}>Connect with Freedom and Security</Text>
-                <Text style={[styles.description, { color: descriptionColor }]}>
-                  Razom is designed to empower you with secure and private communication.
-                  We believe in connecting people while prioritizing the safety and confidentiality of your data.
-                </Text>
-              </View>
-            </>
-          )}
-
-          {/* Login Section */}
-          {!showEmailLogin ? (
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity style={styles.signInEmailButton} onPress={() => setShowEmailLogin(true)}>
-                <Text style={styles.buttonText}>Sign in with Email</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.continueGoogleButton} onPress={() => {/* Handle Continue with Google */ }}>
-                <Text style={styles.buttonText}>Continue with Google</Text>
-              </TouchableOpacity>
+      <View style={[styles.container, { backgroundColor: colorScheme === 'dark' ? '#2d3748' : 'white' }]}>
+        {/* Welcome Section */}
+        {!showEmailLogin && (
+          <>
+            <View style={styles.imageContainer}>
+              <Image source={require('../assets/razom-logo.png')} style={styles.razomLogo} />
             </View>
-          ) : (
-            // Email/Password Input Fields when showEmailLogin is true
-            <>
-              <Text style={[styles.title, { color: titleColor, marginBottom: 24 }]}>Login</Text>
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: labelColor }]}>Email:</Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor },
-                  ]}
-                  placeholder="Email"
-                  placeholderTextColor={colorScheme === 'dark' ? '#a0aec0' : '#6b7280'}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  textContentType="none"
-                  value={email}
-                  onChangeText={setEmail}
-                />
-                {emailError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{emailError}</Text> : null}
-              </View>
+            <View style={styles.textContainer}>
+              <Text style={[styles.title, { color: titleColor }]}>Login to your account.</Text>
+              <Text style={{ color: descriptionColor }}>
+                KonnektSocial
+              </Text>
+              <Text style={[styles.description, { color: descriptionColor }]}>
+                designed to better connect you with your friends and family.
+              </Text>
+            </View>
+          </>
+        )}
 
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: labelColor }]}>Password:</Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor },
-                  ]}
-                  placeholder="Password"
-                  placeholderTextColor={colorScheme === 'dark' ? '#a0aec0' : '#6b7280'}
-                  secureTextEntry
-                  autoCorrect={false}
-                  textContentType="password"
-                  value={password}
-                  onChangeText={setPassword}
-                />
-                {passwordError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{passwordError}</Text> : null}
-              </View>
+        {/* Login Section */}
+        {!showEmailLogin ? (
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity style={[styles.signInEmailButton, { backgroundColor: buttonPrimaryColor }]} onPress={() => setShowEmailLogin(true)}>
+              <Text style={styles.buttonText}>Sign in with Email</Text>
+            </TouchableOpacity>
 
-              <TouchableOpacity style={styles.loginButton} onPress={handleEmailLogin}>
-                <Text style={styles.buttonText}>Login</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.backButton} onPress={() => setShowEmailLogin(false)}>
-                <Text style={[styles.registerLink, { color: registerLinkColor }]}>Back to Welcome</Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {/* Divider and Register Link */}
-          <View style={[styles.dividerContainer, showEmailLogin && { marginTop: 20 }]}>
-            <View style={[styles.dividerLine, { backgroundColor: dividerColor }]} />
-            <Text style={[styles.dividerText, { color: registerTextColor }]}>Don't have an account?</Text>
-            <View style={[styles.dividerLine, { backgroundColor: dividerColor }]} />
+            <TouchableOpacity
+              style={[styles.continueGoogleButton, { backgroundColor: buttonPrimaryColor }]}
+              disabled={!request}
+              onPress={() => {
+                promptAsync();
+              }}
+            >
+              <Text style={styles.buttonText}>Continue with Google</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={[styles.registerLink, { color: registerLinkColor, textAlign: 'center' }]} onPress={() => navigation.navigate('Register')}>
-            Register
-          </Text>
+        ) : (
+          // Email/Password Input Fields when showEmailLogin is true
+          <>
+            <Text style={[styles.title, { color: titleColor, marginBottom: 24 }]}>Login</Text>
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: labelColor }]}>Email:</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor },
+                ]}
+                placeholder="Email"
+                placeholderTextColor={colorScheme === 'dark' ? '#a0aec0' : '#6b7280'}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="none"
+                value={email}
+                onChangeText={setEmail}
+              />
+              {emailError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{emailError}</Text> : null}
+            </View>
 
-          {/* Privacy Text */}
-          {!showEmailLogin && (
-            <Text style={[styles.privacyText, { color: privacyTextColor }]}>Your privacy is our priority.</Text>
-          )}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: labelColor }]}>Password:</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor },
+                ]}
+                placeholder="Password"
+                placeholderTextColor={colorScheme === 'dark' ? '#a0aec0' : '#6b7280'}
+                secureTextEntry
+                autoCorrect={false}
+                textContentType="password"
+                value={password}
+                onChangeText={setPassword}
+              />
+              {passwordError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{passwordError}</Text> : null}
+            </View>
+
+            <TouchableOpacity style={[styles.loginButton, { backgroundColor: buttonPrimaryColor }]} onPress={handleEmailLogin}>
+              <Text style={styles.buttonText}>Login</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.backButton} onPress={() => setShowEmailLogin(false)}>
+              <Text style={[styles.registerLink, { color: registerLinkColor }]}>Back to Welcome</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* Divider and Register Link */}
+        <View style={[styles.dividerContainer, showEmailLogin && { marginTop: 20 }]}>
+          <View style={[styles.dividerLine, { backgroundColor: dividerColor }]} />
+          <Text style={[styles.dividerText, { color: registerTextColor }]}>Don't have an account?</Text>
+          <View style={[styles.dividerLine, { backgroundColor: dividerColor }]} />
         </View>
+        <Text style={[styles.registerLink, { color: registerLinkColor, textAlign: 'center' }]} onPress={() => navigation.navigate('Register')}>
+          Register
+        </Text>
+
+        {/* Privacy Text */}
+        {!showEmailLogin && (
+          <Text style={[styles.privacyText, { color: privacyTextColor }]}>Your privacy is our priority.</Text>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -196,26 +276,13 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: 'transparent', // Ensure it's always transparent to show App.js gradient
+    backgroundColor: 'white',
   },
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: 'transparent', // Ensure it's always transparent
-  },
-  authCard: {
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
   },
   imageContainer: {
     justifyContent: 'center',
@@ -226,6 +293,7 @@ const styles = StyleSheet.create({
     width: 150,
     height: 150,
     resizeMode: 'contain',
+    borderRadius: 20,
   },
   textContainer: {
     justifyContent: 'center',
@@ -248,7 +316,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   signInEmailButton: {
-    backgroundColor: '#3b82f6',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 25,
@@ -257,7 +324,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   continueGoogleButton: {
-    backgroundColor: '#ea4335',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 25,
@@ -311,7 +377,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   loginButton: {
-    backgroundColor: '#22c55e',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 4,

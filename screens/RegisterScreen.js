@@ -13,20 +13,21 @@ import {
 } from 'react-native';
 
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RegisterScreen() {
   const [email, setEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [emailError, setEmailError] = useState('');
+  const [firstNameError, setFirstNameError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
 
   const navigation = useNavigation();
   const colorScheme = useColorScheme();
 
-  // Determine styles based on color scheme
-  const registerCardBackgroundColor = colorScheme === 'dark' ? 'rgba(45, 55, 72, 0.9)' : 'rgba(255, 255, 255, 0.9)';
   const titleColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937';
   const labelColor = colorScheme === 'dark' ? '#e2e8f0' : '#374151';
   const inputBackgroundColor = colorScheme === 'dark' ? 'rgba(74, 85, 104, 0.7)' : 'rgba(255, 255, 255, 0.7)';
@@ -39,6 +40,7 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     let isValid = true;
     setEmailError('');
+    setFirstNameError('');
     setPasswordError('');
     setConfirmPasswordError('');
 
@@ -50,11 +52,16 @@ export default function RegisterScreen() {
       isValid = false;
     }
 
+    if (!firstName.trim()) {
+      setFirstNameError('First name is required');
+      isValid = false;
+    }
+
     if (!password.trim()) {
       setPasswordError('Password is required');
       isValid = false;
-    } else if (password.length < 6) {
-      setPasswordError('Password must be at least 6 characters');
+    } else if (password.length < 8) {
+      setPasswordError('Password must be at least 8 characters');
       isValid = false;
     }
 
@@ -67,18 +74,19 @@ export default function RegisterScreen() {
     }
 
     if (isValid) {
-      console.log('Attempting registration with:', email, password);
+      console.log('Attempting registration with:', email, firstName, password);
 
       try {
         const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174';
 
-        const response = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:8081/users/register`, {
+        const response = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:3000/users/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             email: email,
+            first_name: firstName,
             password: password,
           }),
         });
@@ -88,90 +96,122 @@ export default function RegisterScreen() {
         if (response.ok) {
           console.log('Registration successful:', data);
           Alert.alert('Success', 'Registration successful! Please log in.');
-          navigation.replace('Login');
+
+          // OPTIONAL: If your registration endpoint returns user data and/or access_token,
+          // you might store it here, similar to login.
+          // For now, we assume registration just creates the user, and they need to log in separately.
+          // If you uncomment these, remember to remove the navigation.replace('Auth') below
+          // and let AppNavigator handle the transition as done in AuthScreen.
+          // if (data.access_token) {
+          //   await AsyncStorage.setItem('access_token', data.access_token);
+          // }
+          // if (data.user) {
+          //   await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
+          // }
+
+          // For now, we still navigate to Auth screen after successful registration
+          // because it's a separate step for the user to log in.
+          // If the backend auto-logs in, then remove this and use AsyncStorage methods.
+          navigation.replace('Auth');
+          console.log("Registration: Successfully registered. Navigating to Auth screen for login.");
         } else {
           console.error('Registration error:', data);
-          Alert.alert('Registration Failed', data.detail || 'An unexpected error occurred.');
+          Alert.alert('Registration Failed', data.error || data.detail || 'An unexpected error occurred.');
         }
       } catch (error) {
         console.error('Network or API Error:', error);
-        Alert.alert('Error', 'An error occurred during registration. Please try again.');
+        Alert.alert('Error', `Network or API Error: ${error.message || 'Unknown error'}. Ensure backend is running and IP is correct.`);
       }
     }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={[styles.registerCard, { backgroundColor: registerCardBackgroundColor }]}>
-          <Text style={[styles.title, { color: titleColor }]}>Register</Text>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colorScheme === 'dark' ? '#1a202c' : 'transparent' }]}>
+      <View style={[styles.container, { backgroundColor: colorScheme === 'dark' ? '#2d3748' : 'rgba(255, 255, 255, 0.9)' }]}>
+        <Text style={[styles.title, { color: titleColor }]}>Register</Text>
 
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: labelColor }]}>Email:</Text>
-            <TextInput
-              style={[
-                styles.input,
-                { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor },
-              ]}
-              placeholder="Email"
-              placeholderTextColor={colorScheme === 'dark' ? '#a0aec0' : '#6b7280'}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="none"
-              value={email}
-              onChangeText={setEmail}
-            />
-            {emailError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{emailError}</Text> : null}
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: labelColor }]}>Password:</Text>
-            <TextInput
-              style={[
-                styles.input,
-                { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor },
-              ]}
-              placeholder="Password"
-              placeholderTextColor={colorScheme === 'dark' ? '#a0aec0' : '#6b7280'}
-              secureTextEntry
-              autoCorrect={false}
-              textContentType="newPassword"
-              value={password}
-              onChangeText={setPassword}
-            />
-            {passwordError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{passwordError}</Text> : null}
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: labelColor }]}>Confirm Password:</Text>
-            <TextInput
-              style={[
-                styles.input,
-                { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor },
-              ]}
-              placeholder="Confirm Password"
-              placeholderTextColor={colorScheme === 'dark' ? '#a0aec0' : '#6b7280'}
-              secureTextEntry
-              autoCorrect={false}
-              textContentType="newPassword"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-            />
-            {confirmPasswordError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{confirmPasswordError}</Text> : null}
-          </View>
-
-          <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
-            <Text style={styles.buttonText}>Register</Text>
-          </TouchableOpacity>
-
-          <Text style={[styles.loginText, { color: loginTextColor }]}>
-            Already have an account?{' '}
-            <Text style={[styles.loginLink, { color: loginLinkColor }]} onPress={() => navigation.navigate('Login')}>
-              Login
-            </Text>
-          </Text>
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: labelColor }]}>Email:</Text>
+          <TextInput
+            style={[
+              styles.input,
+              { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor },
+            ]}
+            placeholder="Email"
+            placeholderTextColor={colorScheme === 'dark' ? '#a0aec0' : '#6b7280'}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="none"
+            value={email}
+            onChangeText={setEmail}
+          />
+          {emailError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{emailError}</Text> : null}
         </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: labelColor }]}>First Name:</Text>
+          <TextInput
+            style={[
+              styles.input,
+              { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor },
+            ]}
+            placeholder="First Name"
+            placeholderTextColor={colorScheme === 'dark' ? '#a0aec0' : '#6b7280'}
+            autoCapitalize="words"
+            autoCorrect={false}
+            value={firstName}
+            onChangeText={setFirstName}
+          />
+          {firstNameError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{firstNameError}</Text> : null}
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: labelColor }]}>Password:</Text>
+          <TextInput
+            style={[
+              styles.input,
+              { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor },
+            ]}
+            placeholder="Password"
+            placeholderTextColor={colorScheme === 'dark' ? '#a0aec0' : '#6b7280'}
+            secureTextEntry
+            autoCorrect={false}
+            textContentType="newPassword"
+            value={password}
+            onChangeText={setPassword}
+          />
+          {passwordError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{passwordError}</Text> : null}
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: labelColor }]}>Confirm Password:</Text>
+          <TextInput
+            style={[
+              styles.input,
+              { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor },
+            ]}
+            placeholder="Confirm Password"
+            placeholderTextColor={colorScheme === 'dark' ? '#a0aec0' : '#6b7280'}
+            secureTextEntry
+            autoCorrect={false}
+            textContentType="newPassword"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+          />
+          {confirmPasswordError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{confirmPasswordError}</Text> : null}
+        </View>
+
+        <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
+          <Text style={styles.buttonText}>Register</Text>
+        </TouchableOpacity>
+
+        <Text style={[styles.loginText, { color: loginTextColor }]}>
+          Already have an account?{' '}
+          <Text style={[styles.loginLink, { color: loginLinkColor }]} onPress={() => navigation.navigate('Auth')}>
+            Login
+          </Text>
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -180,25 +220,14 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: 'transparent', // Ensure it's always transparent to show App.js gradient
+    backgroundColor: 'transparent',
   },
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: 'transparent', // Ensure it's always transparent
-  },
-  registerCard: {
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
+    marginTop: Platform.OS === 'android' ? 30 : 0,
   },
   title: {
     fontSize: 24,

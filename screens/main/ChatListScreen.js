@@ -10,58 +10,89 @@ import {
   Image,
   Platform,
   Alert,
-  useColorScheme, 
+  useColorScheme,
+  ActivityIndicator, // Import ActivityIndicator for loading state
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 
-// Dummy data for chat list (replace with actual data later)
-const initialDummyChats = [
-  { id: '1', user: 'Larry Machigo', lastMessage: 'Ok. Let me check', time: '09:38 AM', img: 'https://randomuser.me/api/portraits/men/1.jpg', pinned: true },
-  { id: '2', user: 'Natalie Nora', lastMessage: 'Natalie is typing...', time: 'Now', img: 'https://randomuser.me/api/portraits/women/2.jpg', unread: 2 },
-  { id: '3', user: 'Jennifer Jones', lastMessage: 'Voice message', time: '02:03 PM', img: 'https://randomuser.me/api/portraits/women/3.jpg' },
-  { id: '4', user: 'Larry Machigo', lastMessage: 'See you tomorrow, take..', time: 'Yesterday', img: 'https://randomuser.me/api/portraits/men/4.jpg' },
-  { id: '5', user: 'Sofia', lastMessage: 'Oh... thank you so...', time: '26 May', img: 'https://randomuser.me/api/portraits/women/5.jpg' },
-  { id: '6', user: 'Haider Lve', lastMessage: 'Sticker', time: '12 Jun', img: 'https://randomuser.me/api/portraits/men/6.jpg' },
-  { id: '7', user: 'Mr. elon', lastMessage: 'Cool :-)))', time: '12 Jun', img: 'https://randomuser.me/api/portraits/men/7.jpg' },
-];
-
 export default function ChatListScreen() {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
-  const colorScheme = useColorScheme(); // Get current color scheme
+  const colorScheme = useColorScheme();
 
   const [userName, setUserName] = useState('User');
   const [activeCategory, setActiveCategory] = useState('All Chats');
-  const [chats, setChats] = useState(initialDummyChats);
+  const [chats, setChats] = useState([]); // State to hold fetched chats
+  const [loadingChats, setLoadingChats] = useState(true);
+  const [currentUserData, setCurrentUserData] = useState(null); // To store current user's UID for comparison
 
-  // Define dynamic colors based on color scheme
-  const textColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937'; // For general dark text
-  const mutedTextColor = colorScheme === 'dark' ? '#cbd5e0' : '#4b5563'; // For muted text (time, last message)
-  const headerIconColor = colorScheme === 'dark' ? '#93c5fd' : '#5b4285'; // Header icon color
+  const textColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937';
+  const mutedTextColor = colorScheme === 'dark' ? '#cbd5e0' : '#4b5563';
+  const headerIconColor = colorScheme === 'dark' ? '#93c5fd' : '#5b4285';
+  const categoryBtnInactiveText = colorScheme === 'dark' ? '#cbd5e0' : '#4b5563';
+  const categoryContainerBaseBg = colorScheme === 'dark' ? 'rgba(45, 55, 72, 0.9)' : 'rgba(240, 240, 240, 0.9)';
+
+  const headerBgColor = colorScheme === 'dark' ? '#1a202c' : 'white';
+
+  // Function to fetch chats
+  const fetchChats = async () => {
+    setLoadingChats(true);
+    try {
+      const storedToken = await AsyncStorage.getItem('access_token');
+      const storedUserData = await AsyncStorage.getItem('user_data');
+
+      if (!storedToken || !storedUserData) {
+        // User not logged in, navigate to auth screen
+        console.warn('No token or user data found, redirecting to Auth.');
+        navigation.replace('Auth');
+        return;
+      }
+      const parsedUserData = JSON.parse(storedUserData);
+      setUserName(parsedUserData.name || parsedUserData.first_name || 'User'); // Use first_name if available
+      setCurrentUserData(parsedUserData);
+
+      const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174';
+
+      const response = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:3000/chats/my-chats`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`, // Send token for authentication
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Assuming data is an array of chat objects
+        setChats(data);
+        console.log("Fetched chats:", data);
+      } else {
+        console.error('Failed to fetch chats:', data);
+        Alert.alert('Error', data.detail || 'Failed to load chats.');
+        setChats([]); // Clear chats on error
+      }
+    } catch (error) {
+      console.error('Network or API Error fetching chats:', error);
+      Alert.alert('Error', `Network or API Error: ${error.message || 'Unknown error'}. Ensure backend is running and IP is correct.`);
+      setChats([]); // Clear chats on error
+    } finally {
+      setLoadingChats(false);
+    }
+  };
 
   useEffect(() => {
-    const loadUserName = async () => {
-      try {
-        const storedUserData = await AsyncStorage.getItem('user_data');
-        if (storedUserData) {
-          const parsedUserData = JSON.parse(storedUserData);
-          setUserName(parsedUserData.name || 'User');
-        }
-      } catch (error) {
-        console.error('Failed to load user name for chat list:', error);
-      }
-    };
-
+    // Fetch chats only when the screen is focused
     if (isFocused) {
-      loadUserName();
+      fetchChats();
     }
   }, [isFocused]);
 
   const handleNewMessage = () => {
-    navigation.navigate('NewChat');
+    navigation.navigate('NewChat'); // Navigate to NewChatScreen to select recipient
   };
 
   const handleDeleteChat = (chatId) => {
@@ -69,16 +100,32 @@ export default function ChatListScreen() {
       "Delete Chat",
       "Are you sure you want to delete this chat?",
       [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
+        { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
-          onPress: () => {
-            setChats(prevChats => prevChats.filter(chat => chat.id !== chatId));
-            console.log(`Chat ${chatId} deleted.`);
+          onPress: async () => {
             // In a real app: make API call to delete chat from backend
+            try {
+              const storedToken = await AsyncStorage.getItem('access_token');
+              const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174';
+
+              const response = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:3000/chats/${chatId}`, {
+                method: 'DELETE',
+                headers: {
+                  'Authorization': `Bearer ${storedToken}`,
+                },
+              });
+
+              if (response.ok) {
+                Alert.alert("Success", "Chat deleted.");
+                fetchChats(); // Re-fetch chats to update list
+              } else {
+                const errorData = await response.json();
+                Alert.alert("Error", errorData.detail || "Failed to delete chat.");
+              }
+            } catch (error) {
+              Alert.alert("Error", `Network error during delete: ${error.message}`);
+            }
           },
           style: "destructive"
         }
@@ -87,76 +134,108 @@ export default function ChatListScreen() {
     );
   };
 
-  const ChatListItem = ({ chat }) => (
-    <TouchableOpacity
-      style={styles.chatListItem}
-      onPress={() => navigation.navigate('ChatWindow', { user: chat.user, img: chat.img })}
-      onLongPress={() => handleDeleteChat(chat.id)}
-    >
-      <Image source={{ uri: chat.img }} style={styles.chatAvatar} />
-      <View style={styles.chatContent}>
-        <View style={styles.chatHeader}>
-          <Text style={[styles.chatUserName, { color: textColor }]}>{chat.user}</Text>
-          <Text style={[styles.chatTime, { color: mutedTextColor }]}>{chat.time}</Text>
-        </View>
-        <Text style={[styles.chatLastMessage, { color: mutedTextColor }]} numberOfLines={1}>{chat.lastMessage}</Text>
-      </View>
-      {chat.pinned && <Ionicons name="bookmark" size={16} color={headerIconColor} style={styles.chatPinIcon} />}
-      {chat.unread && <View style={styles.unreadBubble}><Text style={styles.unreadText}>{chat.unread}</Text></View>}
-    </TouchableOpacity>
-  );
+  const ChatListItem = ({ chat }) => {
+    // Determine the other participant's details
+    const otherParticipant = chat.participants.find(p => p.id !== currentUserData?.uid);
+    if (!otherParticipant) return null; // Should not happen if data is well-formed
 
+    return (
+      <TouchableOpacity
+        style={styles.chatListItem}
+        onPress={() => navigation.navigate('ChatWindow', {
+          chatId: chat.chat_id, // Pass the chat ID
+          user: otherParticipant.name || otherParticipant.first_name || 'Unknown User',
+          email: otherParticipant.email, // Pass email if needed
+          img: otherParticipant.profile_img_url || 'https://via.placeholder.com/150', // Default image
+        })}
+        onLongPress={() => handleDeleteChat(chat.chat_id)}
+      >
+        <Image source={{ uri: otherParticipant.profile_img_url || 'https://via.placeholder.com/150' }} style={styles.chatAvatar} />
+        <View style={styles.chatContent}>
+          <View style={styles.chatHeader}>
+            <Text style={[styles.chatUserName, { color: textColor }]}>{otherParticipant.name || otherParticipant.first_name}</Text>
+            <Text style={[styles.chatTime, { color: mutedTextColor }]}>{chat.last_message_timestamp ? new Date(chat.last_message_timestamp).toLocaleTimeString() : ''}</Text>
+          </View>
+          <Text style={[styles.chatLastMessage, { color: mutedTextColor }]} numberOfLines={1}>{chat.last_message_text || 'No messages yet'}</Text>
+        </View>
+        {/* You'd need to implement pinned/unread logic on backend/frontend data */}
+        {/* {chat.pinned && <Ionicons name="bookmark" size={16} color={headerIconColor} style={styles.chatPinIcon} />}
+        {chat.unread && <View style={styles.unreadBubble}><Text style={styles.unreadText}>{chat.unread}</Text></View>} */}
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <Text style={[styles.welcomeText, { color: mutedTextColor }]}>Hello,</Text>
-        <Text style={[styles.userNameText, { color: textColor }]}>{userName}</Text>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.headerIconContainer}>
-            <Ionicons name="search" size={24} color={headerIconColor} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIconContainer}>
-            <Ionicons name="ellipsis-vertical" size={24} color={headerIconColor} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Category Buttons - Still applying BlurView for glassmorphism here, or you can remove it */}
-      <BlurView intensity={20} tint="light" style={styles.categoryContainerBlur}>
-        <View style={styles.categoryInnerContainer}>
-          {['All Chats', 'Groups', 'Contacts'].map((category) => (
-            <TouchableOpacity
-              key={category}
-              style={[
-                styles.categoryButton,
-                activeCategory === category && styles.activeCategoryButton,
-              ]}
-              onPress={() => setActiveCategory(category)}
-            >
-              <Text
-                style={[
-                  styles.categoryButtonText,
-                  activeCategory === category && styles.activeCategoryButtonText,
-                ]}
-              >
-                {category}
-              </Text>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colorScheme === 'dark' ? '#1a202c' : 'white' }]}>
+      <View style={[styles.mainContentWrapper, { backgroundColor: headerBgColor }]}>
+        <View style={styles.header}>
+          <Text style={[styles.welcomeText, { color: mutedTextColor }]}>Hello,</Text>
+          <Text style={[styles.userNameText, { color: textColor }]}>{userName}</Text>
+          <View style={styles.headerIcons}>
+            <TouchableOpacity style={styles.headerIconContainer}>
+              <Ionicons name="search" size={24} color={headerIconColor} />
             </TouchableOpacity>
-          ))}
+            <TouchableOpacity style={styles.headerIconContainer}>
+              <Ionicons name="ellipsis-vertical" size={24} color={headerIconColor} />
+            </TouchableOpacity>
+          </View>
         </View>
-      </BlurView>
 
-      {/* Chat List */}
-      <ScrollView
-        style={styles.chatListScroll}
-        contentContainerStyle={styles.chatListContentContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {chats.map((chat) => (
-          <ChatListItem key={chat.id} chat={chat} />
-        ))}
-      </ScrollView>
+        {/* Category Buttons BlurView - now directly applying glow */}
+        <BlurView
+          intensity={20}
+          tint={colorScheme === 'dark' ? 'dark' : 'light'}
+          style={[
+            styles.categoryContainerBlur,
+            { backgroundColor: categoryContainerBaseBg },
+            activeCategory && styles.categoryContainerGlow // Apply glow directly here
+          ]}
+        >
+          <View style={styles.categoryInnerContainer}>
+            {['All Chats', 'Groups', 'Contacts'].map((category) => (
+              <TouchableOpacity
+                key={category}
+                style={[
+                  styles.categoryButton,
+                  activeCategory === category && styles.activeCategoryButton,
+                ]}
+                onPress={() => setActiveCategory(category)}
+              >
+                <Text
+                  style={[
+                    styles.categoryButtonText,
+                    { color: activeCategory === category ? 'white' : categoryBtnInactiveText },
+                  ]}
+                >
+                  {category}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </BlurView>
+
+        {/* Chat List */}
+        {loadingChats ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#5b4285" />
+            <Text style={[styles.loadingText, { color: mutedTextColor }]}>Loading chats...</Text>
+          </View>
+        ) : chats.length === 0 ? (
+          <Text style={{textAlign: 'center', marginTop: 50, color: mutedTextColor}}>
+            No active chats. Start a new conversation!
+          </Text>
+        ) : (
+          <ScrollView
+            style={styles.chatListScroll}
+            contentContainerStyle={styles.chatListContentContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            {chats.map((chat) => (
+              <ChatListItem key={chat.chat_id} chat={chat} />
+            ))}
+          </ScrollView>
+        )}
+      </View>
 
       {/* Floating Action Button for New Message */}
       <TouchableOpacity style={styles.newMessageButton} onPress={handleNewMessage}>
@@ -169,8 +248,10 @@ export default function ChatListScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: 'transparent',
     paddingTop: Platform.OS === 'android' ? 30 : 0,
+  },
+  mainContentWrapper: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -197,7 +278,7 @@ const styles = StyleSheet.create({
     marginLeft: 15,
     padding: 5,
   },
-  categoryContainerBlur: { // Keeping BlurView here for category buttons
+  categoryContainerBlur: {
     marginHorizontal: 20,
     borderRadius: 25,
     overflow: 'hidden',
@@ -207,7 +288,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  categoryContainerGlow: {
+    borderWidth: 2.5,
+    borderColor: '#c6a4fa',
+    shadowColor: '#c6a4fa',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 15,
+    elevation: 15,
   },
   categoryInnerContainer: {
     flexDirection: 'row',
@@ -227,7 +316,6 @@ const styles = StyleSheet.create({
   categoryButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#4b5563', // Inactive text color (consider dark mode)
   },
   activeCategoryButtonText: {
     color: 'white',
@@ -235,19 +323,17 @@ const styles = StyleSheet.create({
   chatListScroll: {
     flex: 1,
     width: '100%',
-    paddingHorizontal: 20, // Keep padding for the list to breathe
+    paddingHorizontal: 20,
   },
   chatListContentContainer: {
     paddingBottom: 100,
   },
-  // --- Simplified Chat List Item (Blends with background) ---
   chatListItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    // Removed backgroundColor, borderRadius, padding, and shadows to blend in
-    marginBottom: 15, // Slightly increased margin bottom for more separation
-    paddingVertical: 8, // Vertical padding to give space around content
-    paddingHorizontal: 0, // No horizontal padding, as it's handled by ScrollView
+    marginBottom: 15,
+    paddingVertical: 8,
+    paddingHorizontal: 0,
   },
   chatAvatar: {
     width: 50,
@@ -255,7 +341,7 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     marginRight: 15,
     borderWidth: 1,
-    borderColor: '#d1d5db', // Avatar border (consider dark mode for this too)
+    borderColor: '#d1d5db',
   },
   chatContent: {
     flex: 1,
@@ -297,7 +383,7 @@ const styles = StyleSheet.create({
   },
   newMessageButton: {
     position: 'absolute',
-    bottom: 115,
+    bottom: 130,
     right: 30,
     backgroundColor: '#5b4285',
     width: 60,
@@ -311,5 +397,15 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 10,
     zIndex: 10,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 50,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
   },
 });

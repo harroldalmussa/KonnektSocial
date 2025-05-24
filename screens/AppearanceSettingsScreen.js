@@ -1,6 +1,6 @@
 // screens/AppearanceSettingsScreen.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert, useColorScheme, Platform } from 'react-native'; // <--- Add Platform here
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert, useColorScheme, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,20 +16,20 @@ const wallpaperGradients = {
 
 export default function AppearanceSettingsScreen() {
   const navigation = useNavigation();
-  const systemColorScheme = useColorScheme(); // Get system preference
-  const [selectedTheme, setSelectedTheme] = useState('system'); // 'system', 'light', 'dark'
-  const [selectedWallpaper, setSelectedWallpaper] = useState('purple'); // Stores key of wallpaperGradients
+  const systemColorScheme = useColorScheme();
+  const [selectedTheme, setSelectedTheme] = useState('system');
+  const [selectedWallpaper, setSelectedWallpaper] = useState('purple');
 
-  // Dynamic colors for dark/light mode
   const headerTitleColor = systemColorScheme === 'dark' ? '#f7fafc' : '#1f2937';
   const sectionTitleColor = systemColorScheme === 'dark' ? '#cbd5e0' : '#4b5563';
   const itemTextColor = systemColorScheme === 'dark' ? '#e2e8f0' : '#374151';
   const itemBorderColor = systemColorScheme === 'dark' ? '#4a5568' : '#d1d5db';
   const backIconColor = systemColorScheme === 'dark' ? '#93c5fd' : '#1f2937';
-  const activeOptionColor = '#3b82f6'; // Blue for active selection
+  const containerBg = systemColorScheme === 'dark' ? 'rgba(45, 55, 72, 0.9)' : 'rgba(255, 255, 255, 0.9)';
+  const optionGroupBg = systemColorScheme === 'dark' ? 'rgba(74, 85, 104, 0.7)' : 'rgba(255, 255, 255, 0.7)'; // Dynamic background for option groups
+  const activeOptionColor = systemColorScheme === 'dark' ? '#93c5fd' : '#3b82f6'; // <--- ADDED THIS LINE
 
   useEffect(() => {
-    // Load saved theme and wallpaper preferences on mount
     const loadPreferences = async () => {
       try {
         const storedTheme = await AsyncStorage.getItem('app_theme');
@@ -48,9 +48,6 @@ export default function AppearanceSettingsScreen() {
     setSelectedTheme(theme);
     try {
       await AsyncStorage.setItem('app_theme', theme);
-      // You might need to re-render App.js or use a context API here
-      // to immediately apply the theme change across the whole app.
-      // For now, it will apply on next app restart or when App.js re-renders.
       Alert.alert("Theme Updated", `App theme set to ${theme}. Restart required for full effect.`);
     } catch (error) {
       console.error('Failed to save theme:', error);
@@ -61,7 +58,6 @@ export default function AppearanceSettingsScreen() {
     setSelectedWallpaper(wallpaperKey);
     try {
       await AsyncStorage.setItem('app_wallpaper', wallpaperKey);
-      // ChatWindowScreen will read this on its next render
       Alert.alert("Wallpaper Updated", "Default chat wallpaper color updated!");
     } catch (error) {
       console.error('Failed to save wallpaper:', error);
@@ -75,12 +71,16 @@ export default function AppearanceSettingsScreen() {
   ];
 
   const handleOptionPress = (screenName) => {
-    Alert.alert('Coming Soon', `This feature is under development!`);
+    if (screenName) {
+      navigation.navigate(screenName);
+    } else {
+      Alert.alert('Coming Soon', `This feature is under development!`);
+    }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: systemColorScheme === 'dark' ? '#1a202c' : 'transparent' }]}>
+      <View style={[styles.container, { backgroundColor: containerBg }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={backIconColor} />
@@ -92,7 +92,7 @@ export default function AppearanceSettingsScreen() {
         <ScrollView style={styles.scrollView}>
           {/* Theme Section */}
           <Text style={[styles.sectionTitle, { color: sectionTitleColor }]}>Theme</Text>
-          <View style={[styles.optionGroup, { borderBottomColor: itemBorderColor }]}>
+          <View style={[styles.optionGroup, { borderBottomColor: itemBorderColor, backgroundColor: optionGroupBg }]}>
             {['system', 'light', 'dark'].map((theme) => (
               <TouchableOpacity
                 key={theme}
@@ -111,7 +111,7 @@ export default function AppearanceSettingsScreen() {
 
           {/* Default Wallpaper Color Section */}
           <Text style={[styles.sectionTitle, { color: sectionTitleColor, marginTop: 20 }]}>Default Wallpaper Color</Text>
-          <View style={[styles.optionGroup, { borderBottomColor: itemBorderColor }]}>
+          <View style={[styles.optionGroup, { borderBottomColor: itemBorderColor, backgroundColor: optionGroupBg }]}>
             {Object.keys(wallpaperGradients).map((key) => (
               <TouchableOpacity
                 key={key}
@@ -131,7 +131,7 @@ export default function AppearanceSettingsScreen() {
 
           {/* Other Chat Options */}
           <Text style={[styles.sectionTitle, { color: sectionTitleColor, marginTop: 20 }]}>Chat Settings</Text>
-          <View style={styles.optionGroup}>
+          <View style={[styles.optionGroup, { backgroundColor: optionGroupBg }]}>
             {chatOptions.map((option, index) => (
               <TouchableOpacity
                 key={index}
@@ -157,9 +157,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    // Removed borderTopLeftRadius: 20, borderTopRightRadius: 20,
     marginTop: Platform.OS === 'android' ? 30 : 0,
     overflow: 'hidden',
   },
@@ -170,7 +168,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: '#e0e0e0', // Base light border
   },
   backButton: {
     padding: 5,
@@ -191,7 +189,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   optionGroup: {
-    backgroundColor: 'rgba(255, 255, 255, 0.7)', // Slightly transparent background for groups
+    // Dynamic background set in component
     borderRadius: 10,
     overflow: 'hidden',
     marginBottom: 15,
@@ -207,9 +205,9 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0', // Separator for items within group
+    // Dynamic border color set in component
   },
-  settingItem: { // For chat backup, transfer chats etc.
+  settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 15,

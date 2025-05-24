@@ -1,10 +1,10 @@
-// server.js (Backend) - FULL UPDATED CODE
+// server.js (Backend) - FULLY UPDATED AND CLEANED
 const momentsTable = 'moments'; // New table name for moments
 require('dotenv').config();
 
 const express = require('express');
 const app = express();
-const port = 3000;
+const port = 3000; // Ensure this port matches your frontend API calls (e.g., :8081 or :3000)
 const path = require('path');
 const crypto = require('crypto');
 const twilioClient = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
@@ -13,8 +13,13 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
 const jwt = require('jsonwebtoken');
-const secretKey = process.env.JWT_SECRET_KEY;
-const { body, validationResult } = require('express-validator');
+const { body, validationResult } = require('express-validator'); // Correct import for express-validator
+
+const secretKey = process.env.JWT_SECRET_KEY; // This loads from .env
+
+// Optional: Console log to confirm secretKey is loaded at startup
+console.log('Server starting. JWT_SECRET_KEY (loaded):', secretKey ? '****** (defined)' : 'UNDEFINED');
+
 
 // IMPORTANT: Increase payload limits for JSON and URL-encoded bodies
 app.use(express.json({ limit: '10mb' })); // Allows up to 10MB JSON body
@@ -110,7 +115,16 @@ app.post('/users/login', [
             const user = result.rows[0];
 
             if (user && await bcrypt.compare(password, user.password)) {
+                // Debugging logs from previous step - keep these for now
+                console.log('Login successful for user:', user.email);
+                console.log('Secret key for signing:', secretKey ? 'DEFINED' : 'UNDEFINED (PROBLEM!)');
+                console.log('Payload for token:', { userId: user.id, email: user.email });
+
                 const token = jwt.sign({ userId: user.id, email: user.email }, secretKey, { expiresIn: '1h' });
+
+                // Debugging log - verify token *after* signing
+                console.log('Generated token:', token ? 'DEFINED' : 'UNDEFINED (JWT signing failed)');
+
 
                 const userDataForFrontend = {
                     name: user.first_name,
@@ -204,6 +218,142 @@ app.put('/users/profile', authenticateToken, async (req, res) => {
              return res.status(409).json({ error: 'Email already in use.' });
         }
         res.status(500).json({ error: 'Failed to update profile' });
+    }
+});
+
+
+// NEW: User/Contact Management Endpoints
+
+// Search users to add as contacts
+app.get('/users/search', authenticateToken, async (req, res) => {
+    const { q } = req.query; // query string
+    const userId = req.user.userId;
+
+    if (!q || q.length < 2) {
+        return res.status(400).json({ error: 'Search query must be at least 2 characters.' });
+    }
+
+    try {
+        const client = await pool.connect();
+        try {
+            const result = await client.query(
+                `SELECT id, first_name, email, profile_picture_url
+                 FROM ${usersTable}
+                 WHERE (email ILIKE $1 OR first_name ILIKE $1) AND id != $2`, // Exclude current user
+                [`%${q}%`, userId]
+            );
+            res.json({ success: true, users: result.rows });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Search Users Error:', error);
+        res.status(500).json({ error: 'Failed to search users.' });
+    }
+});
+
+// Add a new contact
+app.post('/contacts', authenticateToken, async (req, res) => {
+    const { contact_user_id } = req.body; // The ID of the user to add as a contact
+    const userId = req.user.userId;
+
+    if (!contact_user_id) {
+        return res.status(400).json({ error: 'Missing contact_user_id.' });
+    }
+    if (userId === contact_user_id) {
+        return res.status(400).json({ error: 'Cannot add yourself as a contact.' });
+    }
+
+    try {
+        const client = await pool.connect();
+        try {
+            // Check if contact already exists
+            const existingContact = await client.query(
+                `SELECT id FROM contacts WHERE user_id = $1 AND contact_user_id = $2`,
+                [userId, contact_user_id]
+            );
+            if (existingContact.rows.length > 0) {
+                return res.status(409).json({ error: 'Contact already exists.' });
+            }
+
+            const result = await client.query(
+                `INSERT INTO contacts (user_id, contact_user_id) VALUES ($1, $2) RETURNING id, user_id, contact_user_id`,
+                [userId, contact_user_id]
+            );
+
+            // Fetch details of the added contact user to return to frontend
+            const contactDetails = await client.query(
+                `SELECT id, first_name, email, profile_picture_url FROM ${usersTable} WHERE id = $1`,
+                [contact_user_id]
+            );
+
+            res.status(201).json({
+                success: true,
+                message: 'Contact added successfully',
+                contact: {
+                    contact_id: result.rows[0].id, // ID from the contacts table
+                    user_id: contactDetails.rows[0].id, // The ID of the actual contact user
+                    first_name: contactDetails.rows[0].first_name,
+                    email: contactDetails.rows[0].email,
+                    profile_picture_url: contactDetails.rows[0].profile_picture_url
+                }
+            });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Add Contact Error:', error);
+        res.status(500).json({ error: 'Failed to add contact.' });
+    }
+});
+
+// Get all contacts for the authenticated user
+app.get('/contacts/my', authenticateToken, async (req, res) => {
+    const userId = req.user.userId;
+
+    try {
+        const client = await pool.connect();
+        try {
+            const result = await client.query(
+                `SELECT c.id as contact_id, u.id as user_id, u.first_name, u.email, u.profile_picture_url
+                 FROM contacts c
+                 JOIN ${usersTable} u ON c.contact_user_id = u.id
+                 WHERE c.user_id = $1 ORDER BY u.first_name ASC`,
+                [userId]
+            );
+            res.json({ success: true, contacts: result.rows });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Get Contacts Error:', error);
+        res.status(500).json({ error: 'Failed to retrieve contacts.' });
+    }
+});
+
+// Delete a specific contact
+app.delete('/contacts/:id', authenticateToken, async (req, res) => {
+    const contactId = req.params.id; // This is the ID from the contacts table (c.id from GET /contacts/my)
+    const userId = req.user.userId;
+
+    try {
+        const client = await pool.connect();
+        try {
+            const result = await client.query(
+                `DELETE FROM contacts WHERE id = $1 AND user_id = $2 RETURNING id`,
+                [contactId, userId]
+            );
+            if (result.rows.length > 0) {
+                res.json({ success: true, message: 'Contact deleted successfully', contactId: result.rows[0].id });
+            } else {
+                res.status(404).json({ error: 'Contact not found or unauthorized.' });
+            }
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Delete Contact Error:', error);
+        res.status(500).json({ error: 'Failed to delete contact.' });
     }
 });
 

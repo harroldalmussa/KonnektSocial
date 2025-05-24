@@ -1,6 +1,4 @@
 // screens/main/MainTabs.js
-
-// 1. Import necessary React and React Native components and hooks
 import React from 'react';
 import {
   Dimensions,
@@ -13,23 +11,18 @@ import {
   useColorScheme,
 } from 'react-native';
 
-// 2. Import React Navigation components
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
 
-// 3. Import icons
 import { Ionicons } from '@expo/vector-icons';
 
-// 4. Import your screen components that will be part of the tabs
 import HomeScreen from './HomeScreen';
 import ChatListScreen from './ChatListScreen';
 import ProfileScreen from './ProfileScreen';
+// import CreatePostScreen from './CreatePostScreen'; // REMOVED: No longer needed
 
-// Initialize the main Tab Navigator
 const Tab = createBottomTabNavigator();
-
-// Initialize a Stack Navigator specifically for the Chat flow
 const ChatStack = createNativeStackNavigator();
 
 function ChatFlow() {
@@ -40,12 +33,12 @@ function ChatFlow() {
   );
 }
 
-// Main component for the bottom tab navigation
 export default function MainTabs() {
   const colorScheme = useColorScheme();
 
   const tabBackgroundColor = colorScheme === 'dark' ? 'rgba(45, 55, 72, 0.9)' : 'rgba(255, 255, 255, 0.9)';
   const inactiveTintColor = colorScheme === 'dark' ? '#cbd5e0' : 'gray';
+  const activeTintColor = '#5b4285';
 
   return (
     <Tab.Navigator
@@ -58,19 +51,21 @@ export default function MainTabs() {
             iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'Chat') {
             iconName = focused ? 'chatbox' : 'chatbox-outline';
-          } else if (route.name === 'Profile') {
+          } else if (route.name === 'Profile') { // Adjusted logic for Profile
             iconName = focused ? 'person' : 'person-outline';
           }
+          // The 'Create' tab is no longer here, so no icon logic is needed for it.
           return <Ionicons name={iconName} size={25} color={color} />;
         },
-        tabBarActiveTintColor: '#5b4285',
+        tabBarActiveTintColor: activeTintColor,
         tabBarInactiveTintColor: inactiveTintColor,
         headerShown: false,
+        tabBarShowLabel: false,
         tabBarStyle: {
           backgroundColor: tabBackgroundColor,
           position: 'absolute',
-          bottom: 30,
-          marginHorizontal: 15, 
+          bottom: 50,
+          marginHorizontal: 30,
           borderRadius: 999,
           height: 65,
           paddingBottom: 0,
@@ -79,6 +74,7 @@ export default function MainTabs() {
           shadowOpacity: 0.2,
           shadowRadius: 5,
           elevation: 8,
+          alignSelf: 'center',
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -88,17 +84,17 @@ export default function MainTabs() {
           paddingVertical: 5,
           justifyContent: 'center',
           alignItems: 'center',
-          flex: 1, // This is crucial for even spacing and letting margins constrain width
+          flex: 1,
+          paddingTop: 12,
         },
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Chat" component={ChatFlow} />
+      {/* <Tab.Screen name="Create" component={CreatePostScreen} /> */}
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }
 
-const styles = StyleSheet.create({
-  // Most styles are inline for tab bar options
-});
+const styles = StyleSheet.create({});
