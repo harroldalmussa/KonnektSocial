@@ -1,5 +1,5 @@
 // screens/AuthScreen.js
-import React, { useState, useEffect, useContext } from 'react'; // Add useContext
+import React, { useState, useEffect, useContext } from 'react';
 import {
   StyleSheet,
   Text,
@@ -18,7 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 
-import { AuthContext } from './navigation/AppNavigator'; // Import AuthContext
+import { AuthContext } from '../context/AuthContext';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -172,7 +172,7 @@ export default function AuthScreen() {
         {!showEmailLogin && (
           <>
             <View style={styles.imageContainer}>
-              <Image source={require('../assets/razom-logo.png')} style={styles.razomLogo} />
+              <Image source={require('../../assets/razom-logo.png')} style={styles.razomLogo} />
             </View>
             <View style={styles.textContainer}>
               <Text style={[styles.title, { color: titleColor }]}>Login to your account.</Text>

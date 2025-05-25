@@ -23,7 +23,7 @@ import { Video } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker'; // Import ImagePicker
 import { Picker } from '@react-native-picker/picker'; // Import Picker
 
-import { AuthContext } from '../navigation/AppNavigator';
+import { AuthContext } from '../context/AuthContext'; 
 
 const DEFAULT_PROFILE_PIC = require('../../assets/razom-logo.png');
 const { width } = Dimensions.get('window');

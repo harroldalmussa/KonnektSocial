@@ -7,11 +7,10 @@ import {
   TextInput,
   TouchableOpacity,
   SafeAreaView,
-  Alert,
+  Alert, 
   useColorScheme,
   Platform,
 } from 'react-native';
-
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -95,25 +94,22 @@ export default function RegisterScreen() {
 
         if (response.ok) {
           console.log('Registration successful:', data);
-          Alert.alert('Success', 'Registration successful! Please log in.');
-
-          // OPTIONAL: If your registration endpoint returns user data and/or access_token,
-          // you might store it here, similar to login.
-          // For now, we assume registration just creates the user, and they need to log in separately.
-          // If you uncomment these, remember to remove the navigation.replace('Auth') below
-          // and let AppNavigator handle the transition as done in AuthScreen.
-          // if (data.access_token) {
-          //   await AsyncStorage.setItem('access_token', data.access_token);
-          // }
-          // if (data.user) {
-          //   await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
-          // }
-
-          // For now, we still navigate to Auth screen after successful registration
-          // because it's a separate step for the user to log in.
-          // If the backend auto-logs in, then remove this and use AsyncStorage methods.
-          navigation.replace('Auth');
-          console.log("Registration: Successfully registered. Navigating to Auth screen for login.");
+          // --- MODIFICATION STARTS HERE ---
+          Alert.alert(
+            'Success',
+            'Registration successful! Please log in.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  navigation.replace('Auth'); // Navigate ONLY after user presses OK
+                  console.log("Registration: Successfully registered. Navigating to Auth screen for login.");
+                }
+              }
+            ],
+            { cancelable: false } // Prevent dismissing by tapping outside
+          );
+          // --- MODIFICATION ENDS HERE ---
         } else {
           console.error('Registration error:', data);
           Alert.alert('Registration Failed', data.error || data.detail || 'An unexpected error occurred.');

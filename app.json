@@ -10,7 +10,12 @@
     "splash": {
       "image": "./assets/razom-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#ffffff",
+      "extra" : {
+        "eas" : {
+          "projectId": "65bb61c9-109d-4ff8-88e6-5ad511f54559"
+        }
+      }
     },
     "ios": {
       "supportsTablet": true

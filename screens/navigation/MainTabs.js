@@ -17,10 +17,9 @@ import { useNavigation } from '@react-navigation/native';
 
 import { Ionicons } from '@expo/vector-icons';
 
-import HomeScreen from './HomeScreen';
-import ChatListScreen from './ChatListScreen';
-import ProfileScreen from './ProfileScreen';
-// import CreatePostScreen from './CreatePostScreen'; // REMOVED: No longer needed
+import HomeScreen from '../main/HomeScreen';
+import ChatListScreen from '../main/ChatListScreen';
+import ProfileScreen from '../main/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
 const ChatStack = createNativeStackNavigator();

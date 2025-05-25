@@ -1,6 +1,6 @@
 // screens/SettingsScreen.js
 import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, useColorScheme, Platform } from 'react-native'; // <--- Add Platform here
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, useColorScheme, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -8,11 +8,13 @@ export default function SettingsScreen() {
   const navigation = useNavigation();
   const colorScheme = useColorScheme();
 
-  // Dynamic colors for dark/light mode
   const headerTitleColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937';
   const itemTextColor = colorScheme === 'dark' ? '#e2e8f0' : '#374151';
   const itemBorderColor = colorScheme === 'dark' ? '#4a5568' : '#d1d5db';
   const backIconColor = colorScheme === 'dark' ? '#93c5fd' : '#1f2937';
+  const containerBg = colorScheme === 'dark' ? 'rgba(45, 55, 72, 0.9)' : 'rgba(255, 255, 255, 0.9)'; // Dynamic background for the container
+  const headerBorderColor = colorScheme === 'dark' ? '#4a5568' : '#e0e0e0'; // Dynamic border for header
+  const dividerColor = colorScheme === 'dark' ? '#4a5568' : '#e5e7eb'; // <--- ADDED THIS LINE
 
   const settingsOptions = [
     { name: 'Account', icon: 'person-outline', screen: 'AccountSettings' },
@@ -35,14 +37,14 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.header}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colorScheme === 'dark' ? '#1a202c' : 'transparent' }]}>
+      <View style={[styles.container, { backgroundColor: containerBg }]}>
+        <View style={[styles.header, { borderBottomColor: headerBorderColor }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={backIconColor} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: headerTitleColor }]}>Settings</Text>
-          <View style={{ width: 24 }} /> {/* Placeholder for alignment */}
+          <View style={{ width: 24 }} />
         </View>
 
         <ScrollView style={styles.scrollView}>
@@ -66,15 +68,14 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: 'transparent', // Ensure gradient from App.js shows through
+    backgroundColor: 'transparent',
   },
   container: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)', // Semi-transparent background for content
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    marginTop: Platform.OS === 'android' ? 30 : 0, // Space from status bar/notch
-    overflow: 'hidden', // Crucial for borderRadius
+    marginTop: Platform.OS === 'android' ? 30 : 0,
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
@@ -83,7 +84,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0', // Light border
   },
   backButton: {
     padding: 5,

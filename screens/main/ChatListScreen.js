@@ -54,7 +54,7 @@ export default function ChatListScreen() {
       setUserName(parsedUserData.name || parsedUserData.first_name || 'User'); // Use first_name if available
       setCurrentUserData(parsedUserData);
 
-      const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174';
+      const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174'; // IMPORTANT: Use your actual local IP
 
       const response = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:3000/chats/my-chats`, {
         method: 'GET',
@@ -92,7 +92,7 @@ export default function ChatListScreen() {
   }, [isFocused]);
 
   const handleNewMessage = () => {
-    navigation.navigate('NewChat'); // Navigate to NewChatScreen to select recipient
+    navigation.navigate('NewChatScreen'); // Corrected: Navigates to 'NewChatScreen'
   };
 
   const handleDeleteChat = (chatId) => {

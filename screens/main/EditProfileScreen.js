@@ -17,16 +17,15 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker'; // For picking images from gallery
-
-import { AuthContext } from '../navigation/AppNavigator'; // Assuming AuthContext provides user info/updates if needed
+import * as ImagePicker from 'expo-image-picker'; 
+import { AuthContext } from '../context/AuthContext';
 
 const DEFAULT_PROFILE_PIC = require('../../assets/razom-logo.png');
 
 export default function EditProfileScreen() {
   const navigation = useNavigation();
   const colorScheme = useColorScheme();
-  const { userToken, signIn } = useContext(AuthContext); // Access userToken and signIn for potential re-login if token expires or data changes fundamentally
+  const { userToken, signIn } = useContext(AuthContext); 
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
