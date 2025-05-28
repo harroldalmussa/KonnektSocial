@@ -9,8 +9,8 @@ import {
   SafeAreaView,
   Image,
   Alert,
-  useColorScheme,
   Platform,
+  useColorScheme,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,15 +24,18 @@ WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthScreen() {
   const [showEmailLogin, setShowEmailLogin] = useState(false);
+  const [showUsernameLogin, setShowUsernameLogin] = useState(false);
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
   const navigation = useNavigation();
   const colorScheme = useColorScheme();
 
-  const { signIn } = useContext(AuthContext); // Access signIn function from AuthContext
+  const { signIn } = useContext(AuthContext);
 
   const titleColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937';
   const descriptionColor = colorScheme === 'dark' ? '#cbd5e0' : '#374151';
@@ -85,7 +88,6 @@ export default function AuthScreen() {
 
       if (backendResponse.ok) {
         if (data.access_token) {
-          // Use signIn from AuthContext to update the token and user data
           await signIn(data.access_token, data.user);
         } else {
           console.warn("Google login successful but no access_token received from server.");
@@ -124,7 +126,7 @@ export default function AuthScreen() {
     }
 
     if (isValid) {
-      console.log('Attempting login with:', email, password);
+      console.log('Attempting login with email:', email, password);
 
       try {
         const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174';
@@ -144,7 +146,6 @@ export default function AuthScreen() {
 
         if (response.ok) {
           if (data.access_token) {
-            // Use signIn from AuthContext to update the token and user data
             await signIn(data.access_token, data.user);
           } else {
             console.warn("Login successful but no access_token received from server.");
@@ -165,11 +166,67 @@ export default function AuthScreen() {
     }
   };
 
+  const handleUsernameLogin = async () => {
+    let isValid = true;
+    setUsernameError('');
+    setPasswordError('');
+
+    if (!username.trim()) {
+      setUsernameError('Username is required');
+      isValid = false;
+    }
+
+    if (!password.trim()) {
+      setPasswordError('Password is required');
+      isValid = false;
+    }
+
+    if (isValid) {
+      console.log('Attempting login with username:', username, password);
+
+      try {
+        const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174';
+
+        const response = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:3000/users/login-username`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            username: username,
+            password: password,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          if (data.access_token) {
+            await signIn(data.access_token, data.user);
+          } else {
+            console.warn("Login successful but no access_token received from server.");
+            Alert.alert('Login Warning', 'Could not retrieve session token. Please try logging in again.');
+            return;
+          }
+
+          Alert.alert('Success', 'Login successful!');
+          console.log("Username Login: AsyncStorage updated, AppNavigator will handle the transition.");
+        } else {
+          console.error('Login error:', data);
+          Alert.alert('Login Failed', data.detail || 'An unexpected error occurred.');
+        }
+      } catch (error) {
+        console.error('Network or API Error:', error);
+        Alert.alert('Error', `Network or API Error: ${error.message || 'Unknown error'}. Ensure backend is running and IP is correct.`);
+      }
+    }
+  };
+
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={[styles.container, { backgroundColor: colorScheme === 'dark' ? '#2d3748' : 'white' }]}>
-        {/* Welcome Section */}
-        {!showEmailLogin && (
+        {!showEmailLogin && !showUsernameLogin && (
           <>
             <View style={styles.imageContainer}>
               <Image source={require('../../assets/razom-logo.png')} style={styles.razomLogo} />
@@ -186,10 +243,13 @@ export default function AuthScreen() {
           </>
         )}
 
-        {/* Login Section */}
-        {!showEmailLogin ? (
+        {!showEmailLogin && !showUsernameLogin ? (
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={[styles.signInEmailButton, { backgroundColor: buttonPrimaryColor }]} onPress={() => setShowEmailLogin(true)}>
+            <TouchableOpacity style={[styles.signInEmailButton, { backgroundColor: buttonPrimaryColor }]} onPress={() => { setShowUsernameLogin(true); setEmail(''); setPassword(''); }}>
+              <Text style={styles.buttonText}>Sign in with Username</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.signInEmailButton, { backgroundColor: buttonPrimaryColor }]} onPress={() => { setShowEmailLogin(true); setUsername(''); setPassword(''); }}>
               <Text style={styles.buttonText}>Sign in with Email</Text>
             </TouchableOpacity>
 
@@ -203,10 +263,9 @@ export default function AuthScreen() {
               <Text style={styles.buttonText}>Continue with Google</Text>
             </TouchableOpacity>
           </View>
-        ) : (
-          // Email/Password Input Fields when showEmailLogin is true
+        ) : showEmailLogin ? (
           <>
-            <Text style={[styles.title, { color: titleColor, marginBottom: 24 }]}>Login</Text>
+            <Text style={[styles.title, { color: titleColor, marginBottom: 24 }]}>Login with Email</Text>
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: labelColor }]}>Email:</Text>
               <TextInput
@@ -252,20 +311,65 @@ export default function AuthScreen() {
               <Text style={[styles.registerLink, { color: registerLinkColor }]}>Back to Welcome</Text>
             </TouchableOpacity>
           </>
+        ) : (
+            <>
+            <Text style={[styles.title, { color: titleColor, marginBottom: 24 }]}>Login with Username</Text>
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: labelColor }]}>Username:</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor },
+                ]}
+                placeholder="Username"
+                placeholderTextColor={colorScheme === 'dark' ? '#a0aec0' : '#6b7280'}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="username"
+                value={username}
+                onChangeText={setUsername}
+              />
+              {usernameError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{usernameError}</Text> : null}
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: labelColor }]}>Password:</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor },
+                ]}
+                placeholder="Password"
+                placeholderTextColor={colorScheme === 'dark' ? '#a0aec0' : '#6b7280'}
+                secureTextEntry
+                autoCorrect={false}
+                textContentType="password"
+                value={password}
+                onChangeText={setPassword}
+              />
+              {passwordError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{passwordError}</Text> : null}
+            </View>
+
+            <TouchableOpacity style={[styles.loginButton, { backgroundColor: buttonPrimaryColor }]} onPress={handleUsernameLogin}>
+              <Text style={styles.buttonText}>Login</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.backButton} onPress={() => setShowUsernameLogin(false)}>
+              <Text style={[styles.registerLink, { color: registerLinkColor }]}>Back to Welcome</Text>
+            </TouchableOpacity>
+          </>
         )}
 
-        {/* Divider and Register Link */}
-        <View style={[styles.dividerContainer, showEmailLogin && { marginTop: 20 }]}>
+        <View style={[styles.dividerContainer, (showEmailLogin || showUsernameLogin) && { marginTop: 20 }]}>
           <View style={[styles.dividerLine, { backgroundColor: dividerColor }]} />
           <Text style={[styles.dividerText, { color: registerTextColor }]}>Don't have an account?</Text>
           <View style={[styles.dividerLine, { backgroundColor: dividerColor }]} />
         </View>
-        <Text style={[styles.registerLink, { color: registerLinkColor, textAlign: 'center' }]} onPress={() => navigation.navigate('Register')}>
+        <Text style={[styles.registerLink, { color: registerLinkColor, textAlign: 'center' }]} onPress={() => navigation.navigate('UsernameCheck')}>
           Register
         </Text>
 
-        {/* Privacy Text */}
-        {!showEmailLogin && (
+        {!showEmailLogin && !showUsernameLogin && (
           <Text style={[styles.privacyText, { color: privacyTextColor }]}>Your privacy is our priority.</Text>
         )}
       </View>
@@ -379,7 +483,7 @@ const styles = StyleSheet.create({
   loginButton: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 4,
+    borderRadius: 25,
     alignItems: 'center',
     width: '100%',
     marginTop: 8,

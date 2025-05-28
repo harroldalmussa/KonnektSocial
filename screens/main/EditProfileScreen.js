@@ -17,42 +17,51 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker'; 
+import * as ImagePicker from 'expo-image-picker';
+import { Picker } from '@react-native-picker/picker';
+
 import { AuthContext } from '../context/AuthContext';
 
 const DEFAULT_PROFILE_PIC = require('../../assets/razom-logo.png');
+const MAX_BIO_LENGTH = 200;
 
 export default function EditProfileScreen() {
   const navigation = useNavigation();
   const colorScheme = useColorScheme();
-  const { userToken, signIn } = useContext(AuthContext); 
+  useContext(AuthContext); 
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [bio, setBio] = useState('');
-  const [profilePicture, setProfilePicture] = useState(null); // Will store URI or base64 string
+  const [profilePicture, setProfilePicture] = useState(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [countryCode, setCountryCode] = useState('+33');
 
   const textColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937';
   const mutedTextColor = colorScheme === 'dark' ? '#cbd5e0' : '#4b5563';
   const inputBg = colorScheme === 'dark' ? '#2d3748' : '#e2e8f0';
   const inputBorderColor = colorScheme === 'dark' ? '#4a5568' : '#d1d5db';
-  const buttonBg = '#3b82f6'; // Blue save button
+  const buttonBg = '#5b4285';
   const buttonTextColor = '#ffffff';
   const headerBg = colorScheme === 'dark' ? '#1a202c' : '#ffffff';
   const iconColor = colorScheme === 'dark' ? '#93c5fd' : '#1f2937';
+  const glowColor = '#c6a4fa';
+  const pickerBg = colorScheme === 'dark' ? '#374151' : 'white';
+  const pickerItemColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937';
 
 
   useEffect(() => {
-    // Load existing user data when the screen mounts
     const loadCurrentUserData = async () => {
       try {
         const storedUserData = await AsyncStorage.getItem('user_data');
         if (storedUserData) {
           const parsedUserData = JSON.parse(storedUserData);
           setName(parsedUserData.name || '');
-          setEmail(parsedUserData.email || ''); // Assuming email is stored
+          setEmail(parsedUserData.email || '');
           setBio(parsedUserData.bio || '');
-          setProfilePicture(parsedUserData.profilePicture || null); // Load saved URI
+          setProfilePicture(parsedUserData.profilePicture || null);
+          setPhoneNumber(parsedUserData.phoneNumber || '');
+          setCountryCode(parsedUserData.countryCode || '+33');
         }
       } catch (error) {
         console.error('Failed to load current user data for editing:', error);
@@ -65,7 +74,7 @@ export default function EditProfileScreen() {
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Sorry, we need camera roll permissions to make this work!');
+        Alert.alert('Permission Required', 'Sorry, we need camera roll permissions to make this work');
         return;
       }
     }
@@ -88,18 +97,31 @@ export default function EditProfileScreen() {
         name,
         email,
         bio,
-        profilePicture, // Save the URI or base64 string
+        profilePicture,
+        phoneNumber,
+        countryCode,
       };
 
       await AsyncStorage.setItem('user_data', JSON.stringify(updatedUserData));
       Alert.alert('Success', 'Profile updated successfully!');
-      // Optionally, navigate back or refresh profile screen
       navigation.goBack();
     } catch (error) {
       console.error('Failed to save user data:', error);
       Alert.alert('Error', 'Failed to save profile. Please try again.');
     }
   };
+
+  const countries = [
+    { label: 'France (+33)', value: '+33' },
+    { label: 'United Kingdom (+44)', value: '+44' },
+    { label: 'United States (+1)', value: '+1' },
+    { label: 'Canada (+1)', value: '+1' },
+    { label: 'Germany (+49)', value: '+49' },
+    { label: 'Spain (+34)', value: '+34' },
+    { label: 'Italy (+39)', value: '+39' },
+    { label: 'Australia (+61)', value: '+61' },
+    { label: 'India (+91)', value: '+91' },
+  ];
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: headerBg }]}>
@@ -113,9 +135,8 @@ export default function EditProfileScreen() {
               <Ionicons name="arrow-back" size={24} color={iconColor} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: textColor }]}>Edit Profile</Text>
-            <View style={{ width: 24 }} /> {/* Spacer to balance title */}
+            <View style={{ width: 24 }} />
           </View>
-
           <View style={styles.container}>
             <TouchableOpacity onPress={handleChoosePhoto} style={styles.profilePictureContainer}>
               <Image
@@ -129,7 +150,9 @@ export default function EditProfileScreen() {
 
             <Text style={[styles.label, { color: textColor }]}>Name</Text>
             <TextInput
-              style={[styles.input, { backgroundColor: inputBg, borderColor: inputBorderColor, color: textColor }]}
+              style={[styles.input, { backgroundColor: inputBg, borderColor: inputBorderColor, color: textColor,
+                shadowColor: glowColor, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10, elevation: 10,
+              }]}
               value={name}
               onChangeText={setName}
               placeholder="Enter your name"
@@ -138,7 +161,9 @@ export default function EditProfileScreen() {
 
             <Text style={[styles.label, { color: textColor }]}>Email</Text>
             <TextInput
-              style={[styles.input, { backgroundColor: inputBg, borderColor: inputBorderColor, color: textColor }]}
+              style={[styles.input, { backgroundColor: inputBg, borderColor: inputBorderColor, color: textColor,
+                shadowColor: glowColor, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10, elevation: 10,
+              }]}
               value={email}
               onChangeText={setEmail}
               placeholder="Enter your email"
@@ -147,19 +172,52 @@ export default function EditProfileScreen() {
               autoCapitalize="none"
             />
 
-            <Text style={[styles.label, { color: textColor }]}>Bio</Text>
+            <Text style={[styles.label, { color: textColor }]}>Phone Number</Text>
+            <View style={[styles.phoneNumberContainer, { borderColor: inputBorderColor, backgroundColor: inputBg,
+              shadowColor: glowColor, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10, elevation: 10,
+            }]}>
+              <View style={[styles.pickerContainer, { backgroundColor: pickerBg, borderColor: inputBorderColor }]}>
+                <Picker
+                  selectedValue={countryCode}
+                  onValueChange={(itemValue) => setCountryCode(itemValue)}
+                  dropdownIconColor={textColor}
+                  style={[styles.countryCodePicker, { color: pickerItemColor }]}
+                >
+                  {countries.map((country, index) => (
+                    <Picker.Item key={index} label={country.label} value={country.value} color={pickerItemColor} />
+                  ))}
+                </Picker>
+              </View>
+              <TextInput
+                style={[styles.phoneInput, { color: textColor }]}
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                placeholder="Enter your phone number"
+                placeholderTextColor={mutedTextColor}
+                keyboardType="phone-pad"
+              />
+            </View>
+
+
+            <Text style={[styles.label, { color: textColor }]}>Bio ({bio.length}/{MAX_BIO_LENGTH})</Text>
             <TextInput
-              style={[styles.textArea, { backgroundColor: inputBg, borderColor: inputBorderColor, color: textColor }]}
+              style={[styles.textArea, { backgroundColor: inputBg, borderColor: inputBorderColor, color: textColor,
+                shadowColor: glowColor, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10, elevation: 10,
+              }]}
               value={bio}
               onChangeText={setBio}
               placeholder="Tell us about yourself"
               placeholderTextColor={mutedTextColor}
               multiline
               numberOfLines={4}
+              maxLength={MAX_BIO_LENGTH}
             />
 
             <TouchableOpacity
-              style={[styles.saveButton, { backgroundColor: buttonBg }]}
+              style={[styles.saveButton, { backgroundColor: buttonBg,
+                borderColor: glowColor, borderWidth: 2.5,
+                shadowColor: glowColor, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 15, elevation: 15,
+              }]}
               onPress={handleSaveChanges}
             >
               <Text style={[styles.saveButtonText, { color: buttonTextColor }]}>Save Changes</Text>
@@ -174,13 +232,14 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    paddingTop: Platform.OS === 'android' ? 30 : 0,
   },
   keyboardAvoidingView: {
     flex: 1,
   },
   scrollViewContent: {
     flexGrow: 1,
-    paddingBottom: 20, // Give some padding at the bottom for keyboard
+    paddingBottom: 20,
   },
   header: {
     flexDirection: 'row',
@@ -201,14 +260,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    alignItems: 'center', // Center content horizontally
+    alignItems: 'center',
   },
   profilePictureContainer: {
     marginBottom: 20,
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#e0e0e0', // Placeholder background
+    backgroundColor: '#e0e0e0',
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -230,7 +289,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   label: {
-    alignSelf: 'flex-start', // Align labels to the left
+    alignSelf: 'flex-start',
     marginBottom: 5,
     fontSize: 16,
     fontWeight: '600',
@@ -240,7 +299,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 50,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 25,
     paddingHorizontal: 15,
     marginBottom: 15,
     fontSize: 16,
@@ -248,18 +307,45 @@ const styles = StyleSheet.create({
   textArea: {
     width: '100%',
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 15,
     paddingHorizontal: 15,
     paddingVertical: 10,
     marginBottom: 20,
     fontSize: 16,
-    minHeight: 100, // Make it taller for bio
-    textAlignVertical: 'top', // For Android
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  phoneNumberContainer: {
+    flexDirection: 'row',
+    width: '100%',
+    height: 50,
+    borderWidth: 1,
+    borderRadius: 25,
+    marginBottom: 15,
+    overflow: 'hidden',
+    alignItems: 'center',
+  },
+  pickerContainer: {
+    width: '35%',
+    height: '100%',
+    justifyContent: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#d1d5db',
+  },
+  countryCodePicker: {
+    height: '100%',
+    width: '100%',
+  },
+  phoneInput: {
+    flex: 1,
+    paddingHorizontal: 15,
+    fontSize: 16,
+    height: '100%',
   },
   saveButton: {
     width: '100%',
     paddingVertical: 15,
-    borderRadius: 10,
+    borderRadius: 35,
     alignItems: 'center',
     marginTop: 20,
   },

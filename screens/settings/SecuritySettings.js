@@ -1,11 +1,10 @@
-// screens/SettingsScreen.js
+// screens/SecuritySettings.js
 import React from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, useColorScheme, Platform, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import SecuritySettings from '../settings/SecuritySettings'; 
 
-export default function SettingsScreen() {
+export default function SecuritySettings() {
   const navigation = useNavigation();
   const colorScheme = useColorScheme();
 
@@ -15,25 +14,30 @@ export default function SettingsScreen() {
   const backIconColor = colorScheme === 'dark' ? '#93c5fd' : '#1f2937';
   const containerBg = colorScheme === 'dark' ? 'rgba(45, 55, 72, 0.9)' : 'rgba(255, 255, 255, 0.9)';
   const headerBorderColor = colorScheme === 'dark' ? '#4a5568' : '#e0e0e0';
-  const dividerColor = colorScheme === 'dark' ? '#4a5568' : '#e5e7eb';
 
-  const settingsOptions = [
-    { name: 'Account', icon: 'person-outline', screen: 'AccountSettings' },
-    { name: 'Security', icon: 'lock-closed-outline', screen: 'SecuritySettings' }, 
-    { name: 'Appearance', icon: 'color-palette-outline', screen: 'AppearanceSettings' },
-    { name: 'Notifications', icon: 'notifications-outline', screen: 'NotificationSettings' },
-    { name: 'Storage and Data', icon: 'server-outline', screen: 'StorageDataSettings' },
-    { name: 'App Language', icon: 'language-outline', screen: 'LanguageSettings' },
-    { name: 'Help Center', icon: 'help-circle-outline', screen: 'HelpCenter' },
-    { name: 'Refer a Friend', icon: 'gift-outline', screen: 'ReferFriend' },
-    { name: 'Privacy Policy', icon: 'shield-checkmark-outline', screen: 'PrivacyPolicy' },
+  const securityOptions = [
+    { name: 'Change Password', icon: 'key-outline', action: 'changePassword' },
+    { name: 'Two-Factor Authentication', icon: 'shield-checkmark-outline', action: 'twoFactorAuth' },
+    { name: 'Login Alerts', icon: 'notifications-outline', action: 'loginAlerts' },
+    { name: 'Account Privacy', icon: 'eye-outline', action: 'accountPrivacy' },
   ];
 
-  const handleOptionPress = (screenName) => {
-    if (screenName) {
-      navigation.navigate(screenName);
-    } else {
-      Alert.alert('Coming Soon', `This feature is under development!`);
+  const handleSecurityOptionPress = (action) => {
+    switch (action) {
+      case 'changePassword':
+        Alert.alert('Change Password', 'Navigate to change password screen.');
+        break;
+      case 'twoFactorAuth':
+        Alert.alert('Two-Factor Auth', 'Toggle or configure 2FA.');
+        break;
+      case 'loginAlerts':
+        Alert.alert('Login Alerts', 'Enable/disable email or push notifications for new logins.');
+        break;
+      case 'accountPrivacy':
+        Alert.alert('Account Privacy', 'Toggle between Public and Private account.');
+        break;
+      default:
+        Alert.alert('Coming Soon', 'This feature is under development!');
     }
   };
 
@@ -44,16 +48,16 @@ export default function SettingsScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={backIconColor} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: headerTitleColor }]}>Settings</Text>
+          <Text style={[styles.headerTitle, { color: headerTitleColor }]}>Security Settings</Text>
           <View style={{ width: 24 }} />
         </View>
 
         <ScrollView style={styles.scrollView}>
-          {settingsOptions.map((option, index) => (
+          {securityOptions.map((option, index) => (
             <TouchableOpacity
               key={index}
               style={[styles.settingItem, { borderBottomColor: itemBorderColor }]}
-              onPress={() => handleOptionPress(option.screen)}
+              onPress={() => handleSecurityOptionPress(option.action)}
             >
               <Ionicons name={option.icon} size={24} color={itemTextColor} style={styles.itemIcon} />
               <Text style={[styles.itemText, { color: itemTextColor }]}>{option.name}</Text>

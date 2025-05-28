@@ -1,5 +1,5 @@
 // screens/main/ProfileScreen.js
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,36 +12,45 @@ import {
   useColorScheme,
   ScrollView,
   Dimensions,
-  Modal, // Import Modal
+  Modal,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useNavigation, useIsFocused, useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Video } from 'expo-av';
-import * as ImagePicker from 'expo-image-picker'; // Import ImagePicker
-import { Picker } from '@react-native-picker/picker'; // Import Picker
 
-import { AuthContext } from '../context/AuthContext'; 
+import { AuthContext } from '../context/AuthContext';
 
 const DEFAULT_PROFILE_PIC = require('../../assets/razom-logo.png');
-const { width } = Dimensions.get('window');
-const MOMENT_ASPECT_RATIO = 9 / 16;
-const MOMENT_ITEM_WIDTH = (width - 40 - 20) / 3;
+const { width, height } = Dimensions.get('window');
 
-// Constants for CreatePost/Moment part (moved from CreatePostScreen)
-const VIDEO_ASPECT_RATIO = 9 / 16; // For 9:16 vertical video
+const MOMENT_THUMBNAIL_COLUMNS = 3;
+const HORIZONTAL_SCREEN_PADDING = 20;
+const GAP_BETWEEN_THUMBNAILS = 4;
+
+const MOMENT_THUMBNAIL_WIDTH = (width - (HORIZONTAL_SCREEN_PADDING * 2) - (GAP_BETWEEN_THUMBNAILS * (MOMENT_THUMBNAIL_COLUMNS - 1))) / MOMENT_THUMBNAIL_COLUMNS;
+const MOMENT_THUMBNAIL_HEIGHT = MOMENT_THUMBNAIL_WIDTH * (16 / 9);
+
+const MOMENT_ASPECT_RATIO = 16 / 9;
+const VIDEO_ASPECT_RATIO_UPLOAD = 9 / 16;
+
+const YOUR_LOCAL_IP_ADDRESS = '****';
+const API_BASE_URL = `http://${YOUR_LOCAL_IP_ADDRESS}:3000`;
+
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
+  const route = useRoute();
   const colorScheme = useColorScheme();
-  const videoRef = useRef(null); // Ref for video component
+  const videoRef = useRef(null);
+  const expandedVideoRef = useRef(null);
 
-  const { signOut } = useContext(AuthContext);
+  const { signOut, userToken, userData, updateUserData } = useContext(AuthContext);
 
-  // Dynamic colors (combined from both screens)
   const textColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937';
   const mutedTextColor = colorScheme === 'dark' ? '#cbd5e0' : '#4b5563';
   const iconColor = colorScheme === 'dark' ? '#93c5fd' : '#1f2937';
@@ -53,187 +62,167 @@ export default function ProfileScreen() {
   const postCardBg = colorScheme === 'dark' ? '#2d3748' : '#f8fafc';
   const postBorderColor = colorScheme === 'dark' ? '#4a5568' : '#e2e8f0';
 
-  // Colors for the Create Post/Moment Modal
   const modalHeaderBg = colorScheme === 'dark' ? '#2d3748' : 'rgba(255, 255, 255, 0.9)';
-  const inputBg = colorScheme === 'dark' ? '#4a5568' : 'white';
-  const inputBorder = colorScheme === 'dark' ? '#2d3748' : '#e0e0e0';
-  const activeTabBgCreate = '#5b4285'; // Renamed to avoid clash
-  const inactiveTabBgCreate = colorScheme === 'dark' ? '#4a5568' : '#e2e8f0'; // Renamed
-  const activeTabTextCreate = 'white'; // Renamed
-  const inactiveTabTextCreate = colorScheme === 'dark' ? '#cbd5e0' : '#4b5563'; // Renamed
-  const pickerBg = colorScheme === 'dark' ? '#374151' : 'white';
-  const pickerItemColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937';
-
+  const momentExpandedBg = colorScheme === 'dark' ? '#1a202c' : 'white';
 
   const [userName, setUserName] = useState('Loading...');
+  const [userUsername, setUserUsername] = useState('');
   const [userBio, setUserBio] = useState('No bio yet.');
   const [profilePicture, setProfilePicture] = useState(DEFAULT_PROFILE_PIC);
   const [postsCount, setPostsCount] = useState(0);
   const [momentsCount, setMomentsCount] = useState(0);
-  const [connectionsCount] = useState(5); // No longer changing, can be const
-  const [followingCount] = useState(10); // No longer changing, can be const
+  const [friendsCount, setFriendsCount] = useState(0);
 
   const [activeTab, setActiveTab] = useState('Posts');
   const [userPosts, setUserPosts] = useState([]);
   const [userMoments, setUserMoments] = useState([]);
+  const [userCollections, setUserCollections] = useState([]);
 
-  // State for Create Post/Moment Modal
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createModalActiveTab, setCreateModalActiveTab] = useState('Post'); // 'Post' or 'Moment' for modal
-  const [postText, setPostText] = useState('');
-  const [selectedFeeling, setSelectedFeeling] = useState('Happy');
-  const [momentUri, setMomentUri] = useState(null);
-  const [momentType, setMomentType] = useState(null);
-  const [momentDescription, setMomentDescription] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Gaming');
+  const [showMomentExpandedModal, setShowMomentExpandedModal] = useState(false);
+  const [expandedMoment, setExpandedMoment] = useState(null);
 
-  const feelings = ['Happy', 'Sad', 'Excited', 'Relaxed', 'Angry', 'Grateful', 'Motivated'];
-  const categories = ['Gaming', 'Comedy', 'Productivity', 'Fashion', 'Art', 'Music', 'Travel', 'Food'];
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [loadingMoments, setLoadingMoments] = useState(false);
 
-  // Function to refresh content on focus
-  const loadUserDataAndContent = async () => {
+  const fetchUserProfile = useCallback(async () => {
+    setLoadingProfile(true);
     try {
-      const storedUserData = await AsyncStorage.getItem('user_data');
-      if (storedUserData) {
-        const parsedUserData = JSON.parse(storedUserData);
-        setUserName(parsedUserData.name || 'User');
-        setUserBio(parsedUserData.bio || 'No bio yet.');
-        setProfilePicture(parsedUserData.profilePicture ? { uri: parsedUserData.profilePicture } : DEFAULT_PROFILE_PIC);
+      if (userData) {
+        setUserName(userData.name || 'User');
+        setUserUsername(userData.username || '');
+        setUserBio(userData.bio || 'No bio yet.');
+        setProfilePicture(userData.profile_picture_url ? { uri: userData.profile_picture_url } : DEFAULT_PROFILE_PIC);
+        fetchFriendsCount();
       }
+    } catch (error) {
+      console.error('Failed to fetch user profile:', error);
+      Alert.alert('Error', 'Failed to load profile data.');
+    } finally {
+      setLoadingProfile(false);
+    }
+  }, [userData, fetchFriendsCount]);
 
-      const storedPosts = await AsyncStorage.getItem('user_posts');
-      if (storedPosts) {
-        const parsedPosts = JSON.parse(storedPosts);
-        parsedPosts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        setUserPosts(parsedPosts);
-        setPostsCount(parsedPosts.length);
+  const fetchUserPosts = useCallback(async () => {
+    setLoadingPosts(true);
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      if (!token) {
+        console.warn('No token found for fetching posts.');
+        return;
+      }
+      const response = await fetch(`${API_BASE_URL}/posts/my`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        data.posts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setUserPosts(data.posts);
+        setPostsCount(data.posts.length);
       } else {
+        Alert.alert('Error', `Failed to load posts: ${data.error || 'Unknown error'}`);
         setUserPosts([]);
         setPostsCount(0);
       }
+    } catch (error) {
+      console.error('Failed to fetch user posts:', error);
+      Alert.alert('Error', 'Failed to load posts from server.');
+      setUserPosts([]);
+      setPostsCount(0);
+    } finally {
+      setLoadingPosts(false);
+    }
+  }, []);
 
-      const storedMoments = await AsyncStorage.getItem('user_moments');
-      if (storedMoments) {
-        const parsedMoments = JSON.parse(storedMoments);
-        parsedMoments.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        setUserMoments(parsedMoments);
-        setMomentsCount(parsedMoments.length);
+  const fetchUserMoments = useCallback(async () => {
+    setLoadingMoments(true);
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      if (!token) {
+        console.warn('No token found for fetching moments.');
+        return;
+      }
+      const response = await fetch(`${API_BASE_URL}/moments/my`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        data.moments.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setUserMoments(data.moments);
+        setMomentsCount(data.moments.length);
       } else {
+        Alert.alert('Error', `Failed to load moments: ${data.error || 'Unknown error'}`);
         setUserMoments([]);
         setMomentsCount(0);
       }
-
     } catch (error) {
-      console.error('Failed to load user data or content for profile:', error);
+      console.error('Failed to fetch user moments:', error);
+      Alert.alert('Error', 'Failed to load moments from server.');
+      setUserMoments([]);
+      setMomentsCount(0);
+    } finally {
+      setLoadingMoments(false);
     }
-  };
+  }, []);
+
+  const fetchUserCollections = useCallback(async () => {
+    const mockCollections = [
+      { id: 'col1', name: 'Summer 2023 Highlights', moment_ids: ['m1', 'm2', 'm3'], thumbnail_src: null },
+      { id: 'col2', name: 'Coding Projects', moment_ids: ['m4', 'm5'], thumbnail_src: null },
+    ];
+    const validCollections = mockCollections.map(collection => {
+        const validMomentIds = collection.moment_ids.filter(momentId => userMoments.some(m => m.id === momentId));
+        return { ...collection, moment_ids: validMomentIds };
+    }).filter(collection => collection.moment_ids.length > 0);
+    setUserCollections(validCollections);
+  }, [userMoments]);
+
+  const fetchFriendsCount = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      if (!token) {
+        console.warn('No token found for fetching contacts.');
+        return;
+      }
+      const response = await fetch(`${API_BASE_URL}/contacts/my`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setFriendsCount(data.contacts.length);
+      } else {
+        console.error('Failed to fetch friends count:', data.error || 'Unknown error');
+        setFriendsCount(0);
+      }
+    } catch (error) {
+      console.error('Network error fetching friends count:', error);
+      setFriendsCount(0);
+    }
+  }, []);
 
   useEffect(() => {
     if (isFocused) {
-      loadUserDataAndContent();
-    }
-  }, [isFocused]);
-
-  // Create Post/Moment Functions (moved from CreatePostScreen)
-  const pickMedia = async (mediaType) => {
-    if (Platform.OS !== 'web') {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission required', 'Please grant access to your media library to upload photos/videos.');
-        return;
+      if (route.params?.initialTab) {
+        setActiveTab(route.params.initialTab);
+        navigation.setParams({ initialTab: undefined });
       }
+      fetchUserProfile();
+      fetchUserPosts();
+      fetchUserMoments();
     }
+  }, [isFocused, fetchUserProfile, fetchUserPosts, fetchUserMoments, route.params?.initialTab]);
 
-    let result;
-    if (mediaType === 'image') {
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [9, 16],
-        quality: 1,
-      });
-    } else { // 'video'
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-        allowsEditing: true,
-        quality: 1,
-      });
+  useEffect(() => {
+    if (isFocused && userMoments.length > 0) {
+      fetchUserCollections();
     }
-
-    if (!result.canceled) {
-      const selectedAsset = result.assets[0];
-      setMomentUri(selectedAsset.uri);
-      setMomentType(selectedAsset.type);
-    }
-  };
-
-  const handleCreatePost = async () => {
-    if (postText.trim().length === 0) {
-      Alert.alert('Empty Post', 'Please write something for your post.');
-      return;
-    }
-
-    const newPost = {
-      id: Date.now(),
-      text: postText.trim(),
-      feeling: selectedFeeling,
-      timestamp: new Date().toISOString(),
-      likes: 0,
-      comments: [],
-      shares: 0,
-    };
-
-    try {
-      const existingPosts = await AsyncStorage.getItem('user_posts');
-      const posts = existingPosts ? JSON.parse(existingPosts) : [];
-      const updatedPosts = [newPost, ...posts];
-      await AsyncStorage.setItem('user_posts', JSON.stringify(updatedPosts));
-      console.log('Post saved successfully:', newPost);
-      Alert.alert('Post Created', `Your post about being "${selectedFeeling}" has been published!`);
-      setPostText('');
-      setSelectedFeeling('Happy');
-      setShowCreateModal(false); // Close modal
-      loadUserDataAndContent(); // Refresh posts on profile screen
-    } catch (error) {
-      console.error('Failed to save post:', error);
-      Alert.alert('Error', 'Failed to save your post. Please try again.');
-    }
-  };
-
-  const handleCreateMoment = async () => {
-    if (!momentUri) {
-      Alert.alert('No Media Selected', 'Please select a photo or video for your moment.');
-      return;
-    }
-
-    const newMoment = {
-      id: Date.now(),
-      uri: momentUri,
-      type: momentType,
-      description: momentDescription.trim(),
-      category: selectedCategory,
-      timestamp: new Date().toISOString(),
-    };
-
-    try {
-      const existingMoments = await AsyncStorage.getItem('user_moments');
-      const moments = existingMoments ? JSON.parse(existingMoments) : [];
-      const updatedMoments = [newMoment, ...moments];
-      await AsyncStorage.setItem('user_moments', JSON.stringify(updatedMoments));
-      console.log('Moment saved successfully:', newMoment);
-      Alert.alert('Moment Uploaded', `Your ${momentType} moment has been uploaded!`);
-      setMomentUri(null);
-      setMomentType(null);
-      setMomentDescription('');
-      setSelectedCategory('Gaming');
-      setShowCreateModal(false); // Close modal
-      loadUserDataAndContent(); // Refresh moments on profile screen
-    } catch (error) {
-      console.error('Failed to save moment:', error);
-      Alert.alert('Error', 'Failed to save your moment. Please try again.');
-    }
-  };
-
+  }, [isFocused, userMoments, fetchUserCollections]);
 
   const handleLogout = async () => {
     Alert.alert(
@@ -249,12 +238,11 @@ export default function ProfileScreen() {
           onPress: async () => {
             console.log('Attempting logout from Profile Screen!');
             try {
-              // Ensure this IP is correct for your local setup or use a deployed backend URL
-              const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174';
-              const response = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:3000/users/logout`, {
+              const token = await AsyncStorage.getItem('access_token');
+              const response = await fetch(`${API_BASE_URL}/users/logout`, {
                 method: 'POST',
                 headers: {
-                  'Authorization': 'Bearer ' + await AsyncStorage.getItem('access_token')
+                  'Authorization': `Bearer ${token}`
                 },
               });
 
@@ -282,19 +270,22 @@ export default function ProfileScreen() {
     return date.toLocaleString();
   };
 
-  const handleLike = (postId) => {
-    Alert.alert('Like', `You liked post ID: ${postId}`);
+  const handleLike = (id, type) => {
+    Alert.alert('Feature Coming Soon', `Like function for ${type} ID: ${id} is not yet implemented on the backend.`);
   };
 
-  const handleComment = (postId) => {
-    Alert.alert('Comment', `You want to comment on post ID: ${postId}`);
+  const handleComment = (id, type) => {
+    Alert.alert('Feature Coming Soon', `Comment function for ${type} ID: ${id} is not yet implemented on the backend.`);
   };
 
-  const handleShare = (postId) => {
-    Alert.alert('Share', `You shared post ID: ${postId}`);
+  const handleShare = (id, type) => {
+    Alert.alert('Feature Coming Soon', `Share function for ${type} ID: ${id} is not yet implemented on the backend.`);
   };
 
   const handleEditPost = (postId) => {
+    const postToEdit = userPosts.find(p => p.id === postId);
+    if (!postToEdit) return;
+
     Alert.prompt(
       "Edit Post",
       "Enter new text for your post:",
@@ -306,26 +297,43 @@ export default function ProfileScreen() {
         {
           text: "Save",
           onPress: async (newText) => {
-            if (newText && newText.trim().length > 0) {
+            if (newText && newText.trim().length >= 10 && newText.trim().length <= 500) {
+              setLoadingPosts(true);
               try {
-                const updatedPosts = userPosts.map(post =>
-                  post.id === postId ? { ...post, text: newText.trim() } : post
-                );
-                await AsyncStorage.setItem('user_posts', JSON.stringify(updatedPosts));
-                setUserPosts(updatedPosts);
-                Alert.alert('Success', 'Post updated successfully!');
+                const token = await AsyncStorage.getItem('access_token');
+                const response = await fetch(`${API_BASE_URL}/posts/${postId}`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({
+                    content: newText.trim(),
+                    image: postToEdit.image,
+                    feeling: postToEdit.feeling,
+                  }),
+                });
+                const data = await response.json();
+                if (response.ok) {
+                  Alert.alert('Success', 'Post updated successfully!');
+                  fetchUserPosts();
+                } else {
+                  Alert.alert('Error', data.error || 'Failed to update post.');
+                }
               } catch (error) {
                 console.error('Failed to edit post:', error);
-                Alert.alert('Error', 'Failed to update post.');
+                Alert.alert('Error', 'Failed to update post. Network error?');
+              } finally {
+                setLoadingPosts(false);
               }
             } else {
-              Alert.alert('Invalid Input', 'Post text cannot be empty.');
+              Alert.alert('Invalid Input', 'Post text must be between 10 and 500 characters.');
             }
           }
         },
       ],
       'plain-text',
-      userPosts.find(p => p.id === postId)?.text || ''
+      postToEdit.content
     );
   };
 
@@ -341,15 +349,27 @@ export default function ProfileScreen() {
         {
           text: "Delete",
           onPress: async () => {
+            setLoadingPosts(true);
             try {
-              const updatedPosts = userPosts.filter(post => post.id !== postId);
-              await AsyncStorage.setItem('user_posts', JSON.stringify(updatedPosts));
-              setUserPosts(updatedPosts);
-              setPostsCount(updatedPosts.length);
-              Alert.alert('Deleted', 'Post has been deleted.');
+              const token = await AsyncStorage.getItem('access_token');
+              const response = await fetch(`${API_BASE_URL}/posts/${postId}`, {
+                method: 'DELETE',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                },
+              });
+              const data = await response.json();
+              if (response.ok) {
+                Alert.alert('Deleted', 'Post has been deleted.');
+                fetchUserPosts();
+              } else {
+                Alert.alert('Error', data.error || 'Failed to delete post.');
+              }
             } catch (error) {
               console.error('Failed to delete post:', error);
-              Alert.alert('Error', 'Failed to delete post.');
+              Alert.alert('Error', 'Failed to delete post. Network error?');
+            } finally {
+              setLoadingPosts(false);
             }
           },
           style: "destructive"
@@ -370,15 +390,28 @@ export default function ProfileScreen() {
         {
           text: "Delete",
           onPress: async () => {
+            setLoadingMoments(true);
             try {
-              const updatedMoments = userMoments.filter(moment => moment.id !== momentId);
-              await AsyncStorage.setItem('user_moments', JSON.stringify(updatedMoments));
-              setUserMoments(updatedMoments);
-              setMomentsCount(updatedMoments.length);
-              Alert.alert('Deleted', 'Moment has been deleted.');
+              const token = await AsyncStorage.getItem('access_token');
+              const response = await fetch(`${API_BASE_URL}/moments/${momentId}`, {
+                method: 'DELETE',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                },
+              });
+              const data = await response.json();
+              if (response.ok) {
+                Alert.alert('Deleted', 'Moment has been deleted.');
+                fetchUserMoments();
+                fetchUserCollections();
+              } else {
+                Alert.alert('Error', data.error || 'Failed to delete moment.');
+              }
             } catch (error) {
               console.error('Failed to delete moment:', error);
-              Alert.alert('Error', 'Failed to delete moment.');
+              Alert.alert('Error', 'Failed to delete moment. Network error?');
+            } finally {
+              setLoadingMoments(false);
             }
           },
           style: "destructive"
@@ -387,15 +420,27 @@ export default function ProfileScreen() {
     );
   };
 
-  // Function to reset modal state on close
-  const resetCreateModalState = () => {
-    setPostText('');
-    setSelectedFeeling('Happy');
-    setMomentUri(null);
-    setMomentType(null);
-    setMomentDescription('');
-    setSelectedCategory('Gaming');
-    setCreateModalActiveTab('Post'); // Reset to default 'Post' tab
+  const handleMomentPress = (moment) => {
+    setExpandedMoment(moment);
+    setShowMomentExpandedModal(true);
+  };
+
+  const closeMomentExpandedModal = () => {
+    setShowMomentExpandedModal(false);
+    setExpandedMoment(null);
+  };
+
+  const getCollectionThumbnail = (collection) => {
+    if (collection.moment_ids && collection.moment_ids.length > 0) {
+      const firstMomentId = collection.moment_ids[0];
+      const moment = userMoments.find(m => m.id === firstMomentId);
+      if (moment) {
+        return moment.type === 'image' ?
+               { uri: `data:image/png;base64,${moment.src}` } :
+               { uri: `data:video/mp4;base64,${moment.src}` };
+      }
+    }
+    return DEFAULT_PROFILE_PIC;
   };
 
 
@@ -411,22 +456,31 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.profileInfoSection}>
-          <View style={styles.profilePictureContainerCentered}>
-            <Image source={profilePicture} style={styles.profilePicture} />
-          </View>
-
-          <View style={styles.profileTextInfo}>
-            <Text style={[styles.userName, { color: textColor }]}>{userName}</Text>
-            <View style={styles.profileStats}>
-              <Text style={[styles.statText, { color: mutedTextColor }]}><Text style={[styles.statCount, { color: textColor }]}>{postsCount}</Text> Posts</Text>
-              <Text style={[styles.statText, { color: mutedTextColor }]}><Text style={[styles.statCount, { color: textColor }]}>{connectionsCount}</Text> Connections</Text>
-              <Text style={[styles.statText, { color: mutedTextColor }]}><Text style={[styles.statCount, { color: textColor }]}>{momentsCount}</Text> Moments</Text>
-              <Text style={[styles.statText, { color: mutedTextColor }]}><Text style={[styles.statCount, { color: textColor }]}>{followingCount}</Text> Following</Text>
+        {loadingProfile ? (
+          <ActivityIndicator size="large" color={iconColor} style={{ marginTop: 50 }} />
+        ) : (
+          <View style={styles.profileInfoSection}>
+            <View style={styles.profilePictureContainerCentered}>
+              <Image source={profilePicture} style={styles.profilePicture} />
             </View>
-            <Text style={[styles.userBio, { color: mutedTextColor }]}>Bio: {userBio}</Text>
+
+            <View style={styles.profileTextInfo}>
+              <View style={styles.nameAndUsernameContainer}>
+                  <Text style={[styles.userName, { color: textColor }]}>{userName}</Text>
+                  {userUsername ? (
+                      <Text style={[styles.usernameText, { color: mutedTextColor }]}> | @{userUsername}</Text>
+                  ) : null}
+              </View>
+
+              <View style={styles.profileStats}>
+                <Text style={[styles.statText, { color: mutedTextColor }]}><Text style={[styles.statCount, { color: textColor }]}>{postsCount}</Text> Posts</Text>
+                <Text style={[styles.statText, { color: mutedTextColor }]}><Text style={[styles.statCount, { color: textColor }]}>{friendsCount}</Text> Friends</Text>
+                <Text style={[styles.statText, { color: mutedTextColor }]}><Text style={[styles.statCount, { color: textColor }]}>{momentsCount}</Text> Moments</Text>
+              </View>
+              <Text style={[styles.userBio, { color: mutedTextColor }]}>{userBio}</Text>
+            </View>
           </View>
-        </View>
+        )}
 
         <BlurView
           intensity={20}
@@ -452,7 +506,7 @@ export default function ProfileScreen() {
                 styles.profileActionButton,
                 { backgroundColor: actionButtonBg, borderColor: actionButtonBg }
               ]}
-              onPress={() => Alert.alert('Share Profile', 'Share functionality coming soon!')}
+              onPress={() => navigation.navigate('ShareProfile')}
             >
               <Text style={[styles.profileActionButtonText, { color: 'white' }]}>Share Profile</Text>
             </TouchableOpacity>
@@ -485,36 +539,28 @@ export default function ProfileScreen() {
         <View style={styles.tabContent}>
           {activeTab === 'Posts' && (
             <View>
-              <TouchableOpacity
-                style={styles.newContentButton} // Renamed for generic content creation
-                onPress={() => {
-                  setShowCreateModal(true);
-                  setCreateModalActiveTab('Post'); // Ensure 'Post' tab is active in modal
-                }}
-              >
-                <Ionicons name="add-circle-outline" size={24} color={'white'} />
-                <Text style={styles.newContentButtonText}>Create New Post</Text>
-              </TouchableOpacity>
-              {userPosts.length > 0 ? (
+              {loadingPosts ? (
+                <ActivityIndicator size="large" color={iconColor} style={{ marginTop: 20 }} />
+              ) : userPosts.length > 0 ? (
                 userPosts.map((post) => (
                   <View key={post.id} style={[styles.postCard, { backgroundColor: postCardBg, borderColor: postBorderColor }]}>
-                    <Text style={[styles.postText, { color: textColor }]}>{post.text}</Text>
+                    <Text style={[styles.postText, { color: textColor }]}>{post.content}</Text>
                     <Text style={[styles.postFeeling, { color: mutedTextColor }]}>Feeling: {post.feeling}</Text>
                     <Text style={[styles.postDate, { color: mutedTextColor }]}>
                       {formatPostDate(post.timestamp)}
                     </Text>
                     <View style={styles.postActions}>
-                      <TouchableOpacity onPress={() => handleLike(post.id)} style={styles.postActionButton}>
+                      <TouchableOpacity onPress={() => handleLike(post.id, 'post')} style={styles.postActionButton}>
                         <Ionicons name="heart-outline" size={20} color={iconColor} />
-                        <Text style={[styles.postActionText, { color: mutedTextColor }]}>{post.likes}</Text>
+                        <Text style={[styles.postActionText, { color: mutedTextColor }]}>0</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleComment(post.id)} style={styles.postActionButton}>
+                      <TouchableOpacity onPress={() => handleComment(post.id, 'post')} style={styles.postActionButton}>
                         <Ionicons name="chatbubble-outline" size={20} color={iconColor} />
-                        <Text style={[styles.postActionText, { color: mutedTextColor }]}>{post.comments.length}</Text>
+                        <Text style={[styles.postActionText, { color: mutedTextColor }]}>0</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleShare(post.id)} style={styles.postActionButton}>
+                      <TouchableOpacity onPress={() => handleShare(post.id, 'post')} style={styles.postActionButton}>
                         <Ionicons name="share-outline" size={20} color={iconColor} />
-                        <Text style={[styles.postActionText, { color: mutedTextColor }]}>{post.shares}</Text>
+                        <Text style={[styles.postActionText, { color: mutedTextColor }]}>0</Text>
                       </TouchableOpacity>
                       <View style={styles.postEditDeleteContainer}>
                         <TouchableOpacity onPress={() => handleEditPost(post.id)} style={styles.postActionButton}>
@@ -536,47 +582,40 @@ export default function ProfileScreen() {
           )}
           {activeTab === 'Moments' && (
             <View>
-              <TouchableOpacity
-                style={styles.newContentButton} // Renamed for generic content creation
-                onPress={() => {
-                  setShowCreateModal(true);
-                  setCreateModalActiveTab('Moment'); // Ensure 'Moment' tab is active in modal
-                }}
-              >
-                <Ionicons name="add-circle-outline" size={24} color={'white'} />
-                <Text style={styles.newContentButtonText}>Upload New Moment</Text>
-              </TouchableOpacity>
-              {userMoments.length > 0 ? (
+              {loadingMoments ? (
+                <ActivityIndicator size="large" color={iconColor} style={{ marginTop: 20 }} />
+              ) : userMoments.length > 0 ? (
                 <View style={styles.momentsGrid}>
                   {userMoments.map((moment) => (
-                    <View key={moment.id} style={[styles.momentCard, { backgroundColor: postCardBg, borderColor: postBorderColor }]}>
+                    <TouchableOpacity
+                      key={moment.id}
+                      style={[styles.momentThumbnailCard, { backgroundColor: postCardBg, borderColor: postBorderColor }]}
+                      onPress={() => handleMomentPress(moment)}
+                    >
                       {moment.type === 'image' ? (
-                        <Image source={{ uri: moment.uri }} style={styles.momentMedia} />
+                        <Image
+                          source={{ uri: `data:image/png;base64,${moment.src}` }}
+                          style={styles.momentThumbnailMedia}
+                          resizeMode="cover"
+                          fadeDuration={0}
+                        />
                       ) : (
                         <Video
-                          source={{ uri: moment.uri }}
-                          style={styles.momentMedia}
-                          useNativeControls
+                          source={{ uri: `data:video/mp4;base64,${moment.src}` }}
+                          style={styles.momentThumbnailMedia}
+                          useNativeControls={false}
                           resizeMode="cover"
                           isLooping
+                          shouldPlay
                         />
                       )}
-                      <Text style={[styles.momentDescription, { color: textColor }]} numberOfLines={2}>
-                        {moment.description || 'No description'}
-                      </Text>
-                      <Text style={[styles.momentCategory, { color: mutedTextColor }]}>
-                        Category: {moment.category}
-                      </Text>
-                      <Text style={[styles.momentDate, { color: mutedTextColor }]}>
-                        {formatPostDate(moment.timestamp)}
-                      </Text>
                       <TouchableOpacity
                         onPress={() => handleDeleteMoment(moment.id)}
                         style={styles.deleteMomentButton}
                       >
                         <Ionicons name="trash-outline" size={20} color={'#ef4444'} />
                       </TouchableOpacity>
-                    </View>
+                    </TouchableOpacity>
                   ))}
                 </View>
               ) : (
@@ -589,164 +628,116 @@ export default function ProfileScreen() {
           {activeTab === 'Collections' && (
             <View>
               <Text style={[styles.tabContentTitle, { color: textColor }]}>Your Collections</Text>
-              <Text style={[styles.tabContentText, { color: mutedTextColor }]}>Here you can create albums from your moments.</Text>
+              {userCollections.length > 0 ? (
+                userCollections.map((collection) => (
+                  <TouchableOpacity
+                    key={collection.id}
+                    style={[styles.collectionCard, { backgroundColor: postCardBg, borderColor: postBorderColor }]}
+                    onPress={() => Alert.alert('View Collection', `You clicked on collection: ${collection.name}`)}
+                  >
+                    <Image
+                      source={getCollectionThumbnail(collection)}
+                      style={styles.collectionThumbnail}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.collectionInfo}>
+                      <Text style={[styles.collectionName, { color: textColor }]}>{collection.name}</Text>
+                      <Text style={[styles.collectionMomentCount, { color: mutedTextColor }]}>
+                        {collection.moment_ids.length} Moments
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => Alert.alert('Delete Collection', `Delete ${collection.name}?`)}
+                      style={styles.deleteCollectionButton}
+                    >
+                      <Ionicons name="trash-outline" size={20} color={'#ef4444'} />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={[styles.tabContentText, { color: mutedTextColor }]}>
+                  You haven't created any collections yet.
+                </Text>
+              )}
             </View>
           )}
         </View>
       </ScrollView>
 
-      {/* Create Post/Moment Modal */}
       <Modal
-        animationType="slide"
-        transparent={false}
-        visible={showCreateModal}
-        onRequestClose={() => {
-          setShowCreateModal(!showCreateModal);
-          resetCreateModalState(); // Reset state when modal is closed
-        }}
+        animationType="fade"
+        transparent={true}
+        visible={showMomentExpandedModal}
+        onRequestClose={closeMomentExpandedModal}
       >
-        <SafeAreaView style={[styles.modalSafeArea, { backgroundColor: colorScheme === 'dark' ? '#1a202c' : 'transparent' }]}>
-          <View style={[styles.modalContainer, { backgroundColor: modalHeaderBg }]}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => {
-                setShowCreateModal(false);
-                resetCreateModalState();
-              }} style={styles.modalBackButton}>
-                <Ionicons name="close" size={28} color={textColor} />
-              </TouchableOpacity>
-              <Text style={[styles.modalHeaderTitle, { color: textColor }]}>Create New</Text>
-              <View style={{ width: 28 }} />
-            </View>
-
-            <View style={styles.modalTabSelectionContainer}>
-              <TouchableOpacity
-                style={[styles.modalTabButton, createModalActiveTab === 'Post' && { backgroundColor: activeTabBgCreate }]}
-                onPress={() => setCreateModalActiveTab('Post')}
-              >
-                <Text style={[styles.modalTabButtonText, { color: createModalActiveTab === 'Post' ? activeTabTextCreate : inactiveTabTextCreate }]}>
-                  New Post
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalTabButton, createModalActiveTab === 'Moment' && { backgroundColor: activeTabBgCreate }]}
-                onPress={() => setCreateModalActiveTab('Moment')}
-              >
-                <Text style={[styles.modalTabButtonText, { color: createModalActiveTab === 'Moment' ? activeTabTextCreate : inactiveTabTextCreate }]}>
-                  New Moment
-                </Text>
+        <View style={[styles.expandedMomentOverlay, { backgroundColor: momentExpandedBg }]}>
+          <SafeAreaView style={styles.expandedMomentSafeArea}>
+            <View style={styles.expandedMomentHeader}>
+              <TouchableOpacity onPress={closeMomentExpandedModal} style={styles.expandedMomentCloseButton}>
+                <Ionicons name="close-circle" size={30} color={textColor} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalContentScroll} contentContainerStyle={styles.modalContentScrollContainer}>
-              {createModalActiveTab === 'Post' && (
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: textColor }]}>Write your Post</Text>
-                  <TextInput
-                    style={[styles.modalTextInput, { backgroundColor: inputBg, borderColor: inputBorder, color: textColor }]}
-                    placeholder="What's on your mind?"
-                    placeholderTextColor={mutedTextColor}
-                    multiline
-                    numberOfLines={6}
-                    value={postText}
-                    onChangeText={setPostText}
-                  />
-                  <Text style={[styles.modalSectionTitle, { color: textColor, marginTop: 20 }]}>How are you feeling?</Text>
-                  <View style={[styles.modalPickerContainer, { backgroundColor: pickerBg, borderColor: inputBorder }]}>
-                    <Picker
-                      selectedValue={selectedFeeling}
-                      onValueChange={(itemValue) => setSelectedFeeling(itemValue)}
-                      dropdownIconColor={textColor}
-                      style={{ color: pickerItemColor }}
-                    >
-                      {feelings.map((feeling) => (
-                        <Picker.Item key={feeling} label={feeling} value={feeling} color={pickerItemColor} />
-                      ))}
-                    </Picker>
-                  </View>
-
-                  <TouchableOpacity style={styles.modalCreateButton} onPress={handleCreatePost}>
-                    <Text style={styles.modalCreateButtonText}>Publish Post</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {createModalActiveTab === 'Moment' && (
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: textColor }]}>Upload a Photo or Video</Text>
-                  <View style={styles.modalMediaUploadContainer}>
-                    <TouchableOpacity
-                      style={[styles.modalUploadButton, { backgroundColor: inactiveTabBgCreate }]}
-                      onPress={() => pickMedia('image')}
-                    >
-                      <Ionicons name="image-outline" size={30} color={inactiveTabTextCreate} />
-                      <Text style={[styles.modalUploadButtonText, { color: inactiveTabTextCreate }]}>Select Photo</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.modalUploadButton, { backgroundColor: inactiveTabBgCreate }]}
-                      onPress={() => pickMedia('video')}
-                    >
-                      <Ionicons name="videocam-outline" size={30} color={inactiveTabTextCreate} />
-                      <Text style={[styles.modalUploadButtonText, { color: inactiveTabTextCreate }]}>Select Video (9:16)</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {momentUri && (
-                    <View style={styles.modalMediaPreviewContainer}>
-                      {momentType === 'image' ? (
-                        <Image source={{ uri: momentUri }} style={styles.modalPreviewMedia} />
-                      ) : (
-                        <Video
-                          ref={videoRef}
-                          source={{ uri: momentUri }}
-                          style={[styles.modalPreviewMedia, { height: (width - 40) * VIDEO_ASPECT_RATIO }]}
-                          useNativeControls
-                          resizeMode="contain"
-                          isLooping
-                        />
-                      )}
-                      <View style={styles.modalEditingControls}>
-                        <Text style={[styles.modalEditingText, { color: mutedTextColor }]}>Basic edits (saturation, brightness, vibrancy) would apply here on upload.</Text>
-                      </View>
-                    </View>
+            {expandedMoment && (
+              <ScrollView contentContainerStyle={styles.expandedMomentContent}>
+                <View style={styles.expandedMomentMediaContainer}>
+                  {expandedMoment.type === 'image' ? (
+                    <Image
+                      source={{ uri: `data:image/png;base64,${expandedMoment.src}` }}
+                      style={styles.expandedMomentMedia}
+                      resizeMode="contain"
+                      fadeDuration={0}
+                    />
+                  ) : (
+                    <Video
+                      ref={expandedVideoRef}
+                      source={{ uri: `data:video/mp4;base64,${expandedMoment.src}` }}
+                      style={styles.expandedMomentMedia}
+                      useNativeControls
+                      resizeMode="contain"
+                      isLooping
+                      shouldPlay
+                    />
                   )}
+                </View>
 
-                  <Text style={[styles.modalSectionTitle, { color: textColor, marginTop: 20 }]}>Description (max 200 chars)</Text>
-                  <TextInput
-                    style={[styles.modalTextInput, { backgroundColor: inputBg, borderColor: inputBorder, color: textColor }]}
-                    placeholder="Add a description for your moment..."
-                    placeholderTextColor={mutedTextColor}
-                    multiline
-                    numberOfLines={3}
-                    maxLength={200}
-                    value={momentDescription}
-                    onChangeText={setMomentDescription}
-                  />
-                  <Text style={[styles.modalCharacterCount, { color: mutedTextColor }]}>
-                    {momentDescription.length}/200
+                <View style={styles.expandedMomentDetails}>
+                  <View style={styles.expandedMomentUserInfo}>
+                    <Image source={profilePicture} style={styles.expandedMomentUserPic} />
+                    <View>
+                      <Text style={[styles.expandedMomentUserName, { color: textColor }]}>{userName}</Text>
+                      {userUsername ? (
+                        <Text style={[styles.expandedMomentUsernameText, { color: mutedTextColor }]}>@{userUsername}</Text>
+                      ) : null}
+                      <Text style={[styles.expandedMomentDate, { color: mutedTextColor }]}>
+                        {formatPostDate(expandedMoment.timestamp)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={[styles.expandedMomentDescription, { color: textColor }]}>
+                    {expandedMoment.note || 'No description provided.'}
                   </Text>
 
-                  <Text style={[styles.modalSectionTitle, { color: textColor, marginTop: 20 }]}>Select Category</Text>
-                  <View style={[styles.modalPickerContainer, { backgroundColor: pickerBg, borderColor: inputBorder }]}>
-                    <Picker
-                      selectedValue={selectedCategory}
-                      onValueChange={(itemValue) => setSelectedCategory(itemValue)}
-                      dropdownIconColor={textColor}
-                      style={{ color: pickerItemColor }}
-                    >
-                      {categories.map((category) => (
-                        <Picker.Item key={category} label={category} value={category} color={pickerItemColor} />
-                      ))}
-                    </Picker>
+                  <View style={styles.expandedMomentActions}>
+                    <TouchableOpacity onPress={() => handleLike(expandedMoment.id, 'moment')} style={styles.expandedMomentActionButton}>
+                      <Ionicons name="heart-outline" size={24} color={iconColor} />
+                      <Text style={[styles.expandedMomentActionText, { color: mutedTextColor }]}>Like</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleComment(expandedMoment.id, 'moment')} style={styles.expandedMomentActionButton}>
+                      <Ionicons name="chatbubble-outline" size={24} color={iconColor} />
+                      <Text style={[styles.expandedMomentActionText, { color: mutedTextColor }]}>Comment</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleShare(expandedMoment.id, 'moment')} style={styles.expandedMomentActionButton}>
+                      <Ionicons name="share-outline" size={24} color={iconColor} />
+                      <Text style={[styles.expandedMomentActionText, { color: mutedTextColor }]}>Share</Text>
+                    </TouchableOpacity>
                   </View>
-
-                  <TouchableOpacity style={styles.modalCreateButton} onPress={handleCreateMoment}>
-                    <Text style={styles.modalCreateButtonText}>Upload Moment</Text>
-                  </TouchableOpacity>
                 </View>
-              )}
-            </ScrollView>
-          </View>
-        </SafeAreaView>
+              </ScrollView>
+            )}
+          </SafeAreaView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -755,6 +746,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    paddingTop: Platform.OS === 'android' ? 30 : 0,
   },
   mainContentWrapper: {
     flexGrow: 1,
@@ -770,7 +762,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     width: '100%',
     marginBottom: 15,
-    paddingTop: Platform.OS === 'android' ? 40 : 0,
     marginTop: 20,
   },
   headerIconButton: {
@@ -786,7 +777,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 15,
-    alignSelf: 'center',
   },
   profilePicture: {
     width: 80,
@@ -800,20 +790,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  nameAndUsernameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 5,
+  },
   userName: {
     fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 5,
+  },
+  usernameText: {
+    fontSize: 18,
+    marginLeft: 5,
+    fontWeight: 'normal',
   },
   profileStats: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
     marginBottom: 5,
+    paddingHorizontal: 20,
   },
   statText: {
     fontSize: 14,
     textAlign: 'center',
+    flex: 1,
   },
   statCount: {
     fontWeight: 'bold',
@@ -821,6 +823,8 @@ const styles = StyleSheet.create({
   userBio: {
     fontSize: 14,
     textAlign: 'center',
+    marginTop: 5,
+    paddingHorizontal: 20,
   },
   profileActionsBlurContainer: {
     marginHorizontal: 0,
@@ -896,23 +900,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  // New styles for Posts and Moments
-  newContentButton: { // Renamed from newPostButton
-    backgroundColor: '#5b4285',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 25,
-    marginBottom: 20,
-    marginTop: 10,
-  },
-  newContentButtonText: { // Renamed from newPostButtonText
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
   postCard: {
     padding: 15,
     borderRadius: 10,
@@ -959,35 +946,23 @@ const styles = StyleSheet.create({
   momentsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginTop: 10,
+    justifyContent: 'flex-start',
+    marginHorizontal: -GAP_BETWEEN_THUMBNAILS / 2,
   },
-  momentCard: {
-    width: MOMENT_ITEM_WIDTH,
-    marginBottom: 10,
+  momentThumbnailCard: {
+    width: MOMENT_THUMBNAIL_WIDTH,
+    height: MOMENT_THUMBNAIL_HEIGHT + 30,
+    marginBottom: GAP_BETWEEN_THUMBNAILS,
+    marginHorizontal: GAP_BETWEEN_THUMBNAILS / 2,
     borderRadius: 8,
     overflow: 'hidden',
     borderWidth: 1,
   },
-  momentMedia: {
+  momentThumbnailMedia: {
     width: '100%',
-    height: MOMENT_ITEM_WIDTH * MOMENT_ASPECT_RATIO,
-    backgroundColor: '#ccc',
-  },
-  momentDescription: {
-    fontSize: 12,
-    padding: 8,
-    paddingBottom: 2,
-  },
-  momentCategory: {
-    fontSize: 10,
-    paddingHorizontal: 8,
-    marginBottom: 2,
-  },
-  momentDate: {
-    fontSize: 9,
-    paddingHorizontal: 8,
-    marginBottom: 5,
+    height: MOMENT_THUMBNAIL_HEIGHT,
+    backgroundColor: 'transparent',
+    resizeMode: 'cover',
   },
   deleteMomentButton: {
     alignSelf: 'flex-end',
@@ -997,137 +972,123 @@ const styles = StyleSheet.create({
     right: 5,
     backgroundColor: 'rgba(0,0,0,0.4)',
     borderRadius: 15,
+    zIndex: 1,
   },
 
-  // Modal Styles (moved and adapted from CreatePostScreen styles)
-  modalSafeArea: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  modalContainer: {
-    flex: 1,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    marginTop: Platform.OS === 'android' ? 30 : 0,
-    overflow: 'hidden',
-  },
-  modalHeader: {
+  collectionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-  },
-  modalBackButton: {
-    padding: 5,
-  },
-  modalHeaderTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  modalTabSelectionContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginHorizontal: 20,
-    marginBottom: 20,
-    borderRadius: 25,
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
-    padding: 5,
-  },
-  modalTabButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 20,
-    alignItems: 'center',
-    marginHorizontal: 2,
-  },
-  modalTabButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  modalContentScroll: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  modalContentScrollContainer: {
-    paddingBottom: 100,
-  },
-  modalSection: {
-    marginBottom: 20,
-  },
-  modalSectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  modalTextInput: {
-    borderRadius: 10,
-    borderWidth: 1,
     padding: 15,
-    fontSize: 16,
-    textAlignVertical: 'top',
-  },
-  modalPickerContainer: {
     borderRadius: 10,
+    marginBottom: 10,
     borderWidth: 1,
-    overflow: 'hidden',
   },
-  modalCreateButton: {
-    backgroundColor: '#5b4285',
-    paddingVertical: 15,
-    borderRadius: 25,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  modalCreateButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  modalMediaUploadContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 20,
-  },
-  modalUploadButton: {
-    flex: 1,
-    marginHorizontal: 5,
-    paddingVertical: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalUploadButtonText: {
-    marginTop: 5,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  modalMediaPreviewContainer: {
-    marginTop: 15,
-    marginBottom: 20,
-    alignItems: 'center',
-  },
-  modalPreviewMedia: {
-    width: '100%',
-    height: width * 16 / 9,
-    borderRadius: 10,
+  collectionThumbnail: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    marginRight: 15,
     backgroundColor: '#ccc',
   },
-  modalEditingControls: {
-    marginTop: 10,
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
-    width: '100%',
+  collectionInfo: {
+    flex: 1,
+  },
+  collectionName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  collectionMomentCount: {
+    fontSize: 14,
+  },
+  deleteCollectionButton: {
+    padding: 8,
+  },
+
+  expandedMomentOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  modalEditingText: {
-    fontStyle: 'italic',
+  expandedMomentSafeArea: {
+    flex: 1,
+    width: '100%',
+  },
+  expandedMomentHeader: {
+    width: '100%',
+    alignItems: 'flex-end',
+    padding: 10,
+    paddingTop: Platform.OS === 'android' ? 30 : 0,
+  },
+  expandedMomentCloseButton: {
+    padding: 5,
+  },
+  expandedMomentContent: {
+    flexGrow: 1,
+    justifyContent: 'space-between',
+    paddingBottom: 20,
+  },
+  expandedMomentMediaContainer: {
+    width: '100%',
+    aspectRatio: 9 / 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  expandedMomentMedia: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'transparent',
+    resizeMode: 'contain',
+  },
+  expandedMomentDetails: {
+    paddingHorizontal: 20,
+    marginTop: 15,
+  },
+  expandedMomentUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  expandedMomentUserPic: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  expandedMomentUserName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  expandedMomentUsernameText: {
+    fontSize: 14,
+    color: '#cbd5e0',
+    marginTop: 2,
+  },
+  expandedMomentDate: {
     fontSize: 12,
   },
-  modalCharacterCount: {
-    textAlign: 'right',
-    fontSize: 12,
-    marginTop: 5,
+  expandedMomentDescription: {
+    fontSize: 15,
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  expandedMomentActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128,128,128,0.3)',
+    paddingTop: 15,
+  },
+  expandedMomentActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 5,
+  },
+  expandedMomentActionText: {
+    marginLeft: 5,
+    fontSize: 14,
   },
 });

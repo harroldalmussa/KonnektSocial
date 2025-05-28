@@ -11,7 +11,7 @@ import {
   Platform,
   Alert,
   useColorScheme,
-  ActivityIndicator, // Import ActivityIndicator for loading state
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
@@ -25,9 +25,9 @@ export default function ChatListScreen() {
 
   const [userName, setUserName] = useState('User');
   const [activeCategory, setActiveCategory] = useState('All Chats');
-  const [chats, setChats] = useState([]); // State to hold fetched chats
+  const [chats, setChats] = useState([]);
   const [loadingChats, setLoadingChats] = useState(true);
-  const [currentUserData, setCurrentUserData] = useState(null); // To store current user's UID for comparison
+  const [currentUserData, setCurrentUserData] = useState(null);
 
   const textColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937';
   const mutedTextColor = colorScheme === 'dark' ? '#cbd5e0' : '#4b5563';
@@ -37,7 +37,6 @@ export default function ChatListScreen() {
 
   const headerBgColor = colorScheme === 'dark' ? '#1a202c' : 'white';
 
-  // Function to fetch chats
   const fetchChats = async () => {
     setLoadingChats(true);
     try {
@@ -45,54 +44,51 @@ export default function ChatListScreen() {
       const storedUserData = await AsyncStorage.getItem('user_data');
 
       if (!storedToken || !storedUserData) {
-        // User not logged in, navigate to auth screen
         console.warn('No token or user data found, redirecting to Auth.');
         navigation.replace('Auth');
         return;
       }
       const parsedUserData = JSON.parse(storedUserData);
-      setUserName(parsedUserData.name || parsedUserData.first_name || 'User'); // Use first_name if available
+      setUserName(parsedUserData.name || parsedUserData.first_name || 'User');
       setCurrentUserData(parsedUserData);
 
-      const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174'; // IMPORTANT: Use your actual local IP
+      const YOUR_LOCAL_IP_ADDRESS = '****';
 
       const response = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:3000/chats/my-chats`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${storedToken}`, // Send token for authentication
+          'Authorization': `Bearer ${storedToken}`,
         },
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        // Assuming data is an array of chat objects
         setChats(data);
         console.log("Fetched chats:", data);
       } else {
         console.error('Failed to fetch chats:', data);
         Alert.alert('Error', data.detail || 'Failed to load chats.');
-        setChats([]); // Clear chats on error
+        setChats([]);
       }
     } catch (error) {
       console.error('Network or API Error fetching chats:', error);
       Alert.alert('Error', `Network or API Error: ${error.message || 'Unknown error'}. Ensure backend is running and IP is correct.`);
-      setChats([]); // Clear chats on error
+      setChats([]);
     } finally {
       setLoadingChats(false);
     }
   };
 
   useEffect(() => {
-    // Fetch chats only when the screen is focused
     if (isFocused) {
       fetchChats();
     }
   }, [isFocused]);
 
   const handleNewMessage = () => {
-    navigation.navigate('NewChatScreen'); // Corrected: Navigates to 'NewChatScreen'
+    navigation.navigate('NewChatScreen');
   };
 
   const handleDeleteChat = (chatId) => {
@@ -104,7 +100,6 @@ export default function ChatListScreen() {
         {
           text: "Delete",
           onPress: async () => {
-            // In a real app: make API call to delete chat from backend
             try {
               const storedToken = await AsyncStorage.getItem('access_token');
               const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174';
@@ -118,7 +113,7 @@ export default function ChatListScreen() {
 
               if (response.ok) {
                 Alert.alert("Success", "Chat deleted.");
-                fetchChats(); // Re-fetch chats to update list
+                fetchChats();
               } else {
                 const errorData = await response.json();
                 Alert.alert("Error", errorData.detail || "Failed to delete chat.");
@@ -135,18 +130,17 @@ export default function ChatListScreen() {
   };
 
   const ChatListItem = ({ chat }) => {
-    // Determine the other participant's details
     const otherParticipant = chat.participants.find(p => p.id !== currentUserData?.uid);
-    if (!otherParticipant) return null; // Should not happen if data is well-formed
+    if (!otherParticipant) return null;
 
     return (
       <TouchableOpacity
         style={styles.chatListItem}
         onPress={() => navigation.navigate('ChatWindow', {
-          chatId: chat.chat_id, // Pass the chat ID
+          chatId: chat.chat_id,
           user: otherParticipant.name || otherParticipant.first_name || 'Unknown User',
-          email: otherParticipant.email, // Pass email if needed
-          img: otherParticipant.profile_img_url || 'https://via.placeholder.com/150', // Default image
+          email: otherParticipant.email,
+          img: otherParticipant.profile_img_url || 'https://via.placeholder.com/150',
         })}
         onLongPress={() => handleDeleteChat(chat.chat_id)}
       >
@@ -158,9 +152,6 @@ export default function ChatListScreen() {
           </View>
           <Text style={[styles.chatLastMessage, { color: mutedTextColor }]} numberOfLines={1}>{chat.last_message_text || 'No messages yet'}</Text>
         </View>
-        {/* You'd need to implement pinned/unread logic on backend/frontend data */}
-        {/* {chat.pinned && <Ionicons name="bookmark" size={16} color={headerIconColor} style={styles.chatPinIcon} />}
-        {chat.unread && <View style={styles.unreadBubble}><Text style={styles.unreadText}>{chat.unread}</Text></View>} */}
       </TouchableOpacity>
     );
   };
@@ -181,14 +172,13 @@ export default function ChatListScreen() {
           </View>
         </View>
 
-        {/* Category Buttons BlurView - now directly applying glow */}
         <BlurView
           intensity={20}
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
           style={[
             styles.categoryContainerBlur,
             { backgroundColor: categoryContainerBaseBg },
-            activeCategory && styles.categoryContainerGlow // Apply glow directly here
+            activeCategory && styles.categoryContainerGlow
           ]}
         >
           <View style={styles.categoryInnerContainer}>
@@ -214,7 +204,6 @@ export default function ChatListScreen() {
           </View>
         </BlurView>
 
-        {/* Chat List */}
         {loadingChats ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#5b4285" />
@@ -237,7 +226,6 @@ export default function ChatListScreen() {
         )}
       </View>
 
-      {/* Floating Action Button for New Message */}
       <TouchableOpacity style={styles.newMessageButton} onPress={handleNewMessage}>
         <Ionicons name="pencil" size={28} color="white" />
       </TouchableOpacity>

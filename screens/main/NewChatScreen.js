@@ -18,8 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// IMPORTANT: Replace with your actual local IP address where your backend server is running
-const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174';
+const YOUR_LOCAL_IP_ADDRESS = '****';
 
 export default function NewChatScreen() {
   const navigation = useNavigation();
@@ -39,7 +38,6 @@ export default function NewChatScreen() {
   const itemBorderColor = colorScheme === 'dark' ? '#1a202c' : '#e0e0e0';
 
   useEffect(() => {
-    // Load current user data on component mount
     const loadUserData = async () => {
       try {
         const storedUserData = await AsyncStorage.getItem('user_data');
@@ -54,14 +52,13 @@ export default function NewChatScreen() {
   }, []);
 
   useEffect(() => {
-    // Debounce search input to prevent excessive API calls
     const delayDebounceFn = setTimeout(() => {
       if (searchQuery.length >= 2) {
         performSearch();
       } else {
-        setSearchResults([]); // Clear results if query is too short
+        setSearchResults([]);
       }
-    }, 500); // 500ms debounce time
+    }, 500); 
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery]);
@@ -75,8 +72,6 @@ export default function NewChatScreen() {
         navigation.replace('Auth');
         return;
       }
-
-      // Encode the search query to handle special characters
       const response = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:3000/users/search?q=${encodeURIComponent(searchQuery)}`, {
         headers: {
           'Authorization': `Bearer ${storedToken}`,
@@ -86,7 +81,6 @@ export default function NewChatScreen() {
       const data = await response.json();
 
       if (response.ok) {
-        // Filter out the current user from search results
         const filteredResults = data.users.filter(user => user.id !== currentUserData?.uid);
         setSearchResults(filteredResults);
       } else {
@@ -103,12 +97,12 @@ export default function NewChatScreen() {
 
   const handleUserSelect = async (selectedUser) => {
     Alert.alert(
-      "Start Chat or Add Contact", // Updated title
-      `What would you like to do with ${selectedUser.first_name}?`, // Updated message
+      "Start Chat or Add Contact", 
+      `What would you like to do with ${selectedUser.first_name}?`, 
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Start Chat", // Changed button text for clarity
+          text: "Start Chat", 
           onPress: async () => {
             try {
               const storedToken = await AsyncStorage.getItem('access_token');
@@ -124,8 +118,7 @@ export default function NewChatScreen() {
               const data = await response.json();
 
               if (response.ok) {
-                // Navigate to ChatWindow with the newly created/found chatId
-                navigation.replace('ChatWindow', { // Use replace to prevent going back to NewChatScreen
+                navigation.replace('ChatWindow', { 
                   chatId: data.chatId,
                   user: selectedUser.first_name,
                   email: selectedUser.email,
@@ -141,25 +134,23 @@ export default function NewChatScreen() {
           }
         },
         {
-          text: "Add Contact", // Re-added this option
+          text: "Add Contact", 
           onPress: async () => {
             try {
               const storedToken = await AsyncStorage.getItem('access_token');
-              // Note: The endpoint for adding contacts is '/contacts' not '/contacts/add' in your server.js
               const response = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:3000/contacts`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${storedToken}`,
                 },
-                body: JSON.stringify({ contact_user_id: selectedUser.id }), // Ensure correct payload key
+                body: JSON.stringify({ contact_user_id: selectedUser.id }), 
               });
 
               const data = await response.json();
 
               if (response.ok) {
                 Alert.alert('Success', `${selectedUser.first_name} has been added to your contacts.`);
-                // Optionally, refresh contacts list or provide feedback
               } else {
                 Alert.alert('Contact Error', data.error || data.detail || 'Failed to add contact.');
               }
@@ -176,16 +167,13 @@ export default function NewChatScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: headerBgColor }]}>
       <View style={[styles.container, { backgroundColor: colorScheme === 'dark' ? '#2d3748' : 'rgba(255, 255, 255, 0.9)' }]}>
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={textColor} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: textColor }]}>New Message</Text>
-          <View style={{ width: 24 }} /> {/* Spacer */}
+          <View style={{ width: 24 }} /> 
         </View>
-
-        {/* Search Input */}
         <View style={[styles.searchInputContainer, { backgroundColor: inputBgColor, borderColor: inputBorderColor }]}>
           <Ionicons name="search" size={20} color={mutedTextColor} style={styles.searchIcon} />
           <TextInput
@@ -199,8 +187,6 @@ export default function NewChatScreen() {
           />
           {loadingSearch && <ActivityIndicator size="small" color={mutedTextColor} />}
         </View>
-
-        {/* Search Results */}
         {searchQuery.length >= 2 && searchResults.length === 0 && !loadingSearch && (
           <Text style={[styles.noResultsText, { color: mutedTextColor }]}>No users found.</Text>
         )}

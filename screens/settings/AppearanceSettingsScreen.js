@@ -5,12 +5,11 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Define available wallpaper gradients
 const wallpaperGradients = {
   purple: ['#5b4285', '#7f58a7'],
-  darkPurple: ['#3a0050', '#1a0028'], // Darker purple gradient
+  darkPurple: ['#3a0050', '#1a0028'], 
   blue: ['#3B82F6', '#60a5fa'],
-  ivoryCream: ['#f5f5dc', '#fffafa'], // Creamy white to almost white
+  ivoryCream: ['#f5f5dc', '#fffafa'], 
   green: ['#10b981', '#34d399'],
 };
 
@@ -26,8 +25,8 @@ export default function AppearanceSettingsScreen() {
   const itemBorderColor = systemColorScheme === 'dark' ? '#4a5568' : '#d1d5db';
   const backIconColor = systemColorScheme === 'dark' ? '#93c5fd' : '#1f2937';
   const containerBg = systemColorScheme === 'dark' ? 'rgba(45, 55, 72, 0.9)' : 'rgba(255, 255, 255, 0.9)';
-  const optionGroupBg = systemColorScheme === 'dark' ? 'rgba(74, 85, 104, 0.7)' : 'rgba(255, 255, 255, 0.7)'; // Dynamic background for option groups
-  const activeOptionColor = systemColorScheme === 'dark' ? '#93c5fd' : '#3b82f6'; // <--- ADDED THIS LINE
+  const optionGroupBg = systemColorScheme === 'dark' ? 'rgba(74, 85, 104, 0.7)' : 'rgba(255, 255, 255, 0.7)';
+  const activeOptionColor = systemColorScheme === 'dark' ? '#93c5fd' : '#3b82f6'; 
 
   useEffect(() => {
     const loadPreferences = async () => {
@@ -90,7 +89,6 @@ export default function AppearanceSettingsScreen() {
         </View>
 
         <ScrollView style={styles.scrollView}>
-          {/* Theme Section */}
           <Text style={[styles.sectionTitle, { color: sectionTitleColor }]}>Theme</Text>
           <View style={[styles.optionGroup, { borderBottomColor: itemBorderColor, backgroundColor: optionGroupBg }]}>
             {['system', 'light', 'dark'].map((theme) => (
@@ -108,8 +106,6 @@ export default function AppearanceSettingsScreen() {
               </TouchableOpacity>
             ))}
           </View>
-
-          {/* Default Wallpaper Color Section */}
           <Text style={[styles.sectionTitle, { color: sectionTitleColor, marginTop: 20 }]}>Default Wallpaper Color</Text>
           <View style={[styles.optionGroup, { borderBottomColor: itemBorderColor, backgroundColor: optionGroupBg }]}>
             {Object.keys(wallpaperGradients).map((key) => (
@@ -128,8 +124,6 @@ export default function AppearanceSettingsScreen() {
               </TouchableOpacity>
             ))}
           </View>
-
-          {/* Other Chat Options */}
           <Text style={[styles.sectionTitle, { color: sectionTitleColor, marginTop: 20 }]}>Chat Settings</Text>
           <View style={[styles.optionGroup, { backgroundColor: optionGroupBg }]}>
             {chatOptions.map((option, index) => (
@@ -157,7 +151,6 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    // Removed borderTopLeftRadius: 20, borderTopRightRadius: 20,
     marginTop: Platform.OS === 'android' ? 30 : 0,
     overflow: 'hidden',
   },
@@ -168,7 +161,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0', // Base light border
+    borderBottomColor: '#e0e0e0', 
   },
   backButton: {
     padding: 5,
@@ -189,7 +182,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   optionGroup: {
-    // Dynamic background set in component
     borderRadius: 10,
     overflow: 'hidden',
     marginBottom: 15,
@@ -205,7 +197,6 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
-    // Dynamic border color set in component
   },
   settingItem: {
     flexDirection: 'row',

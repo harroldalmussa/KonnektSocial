@@ -1,5 +1,5 @@
-// screens/RegisterScreen.js
-import React, { useState } from 'react';
+// screens/RegisterDetailsScreen.js
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,14 +7,16 @@ import {
   TextInput,
   TouchableOpacity,
   SafeAreaView,
-  Alert, 
-  useColorScheme,
+  Alert,
   Platform,
+  useColorScheme,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
-export default function RegisterScreen() {
+export default function RegisterDetailsScreen() {
+  const route = useRoute();
+  const { username: preselectedUsername } = route.params || {};
+
   const [email, setEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [password, setPassword] = useState('');
@@ -29,12 +31,23 @@ export default function RegisterScreen() {
 
   const titleColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937';
   const labelColor = colorScheme === 'dark' ? '#e2e8f0' : '#374151';
-  const inputBackgroundColor = colorScheme === 'dark' ? 'rgba(74, 85, 104, 0.7)' : 'rgba(255, 255, 255, 0.7)';
+  const inputBackgroundColor = colorScheme === 'dark' ? 'rgba(74, 85, 104, 0.7)' : 'white';
   const inputBorderColor = colorScheme === 'dark' ? '#4a5568' : '#d1d5db';
   const inputTextColor = colorScheme === 'dark' ? '#e2e8f0' : '#374151';
   const errorTextColor = colorScheme === 'dark' ? '#fca5a5' : '#ef4444';
   const loginTextColor = colorScheme === 'dark' ? '#cbd5e0' : '#4b5563';
-  const loginLinkColor = colorScheme === 'dark' ? '#93c5fd' : '#3b82f6';
+  const loginLinkColor = colorScheme === 'dark' ? '#93c5fd' : '#61469B';
+  const buttonPrimaryColor = '#61469B';
+
+  useEffect(() => {
+    if (!preselectedUsername) {
+      Alert.alert("Error", "Please choose a username first.", [{
+        text: "OK",
+        onPress: () => navigation.replace('UsernameCheck')
+      }]);
+    }
+  }, [preselectedUsername, navigation]);
+
 
   const handleRegister = async () => {
     let isValid = true;
@@ -73,7 +86,7 @@ export default function RegisterScreen() {
     }
 
     if (isValid) {
-      console.log('Attempting registration with:', email, firstName, password);
+      console.log('Attempting registration with:', email, firstName, preselectedUsername, password);
 
       try {
         const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174';
@@ -86,6 +99,7 @@ export default function RegisterScreen() {
           body: JSON.stringify({
             email: email,
             first_name: firstName,
+            username: preselectedUsername,
             password: password,
           }),
         });
@@ -94,7 +108,6 @@ export default function RegisterScreen() {
 
         if (response.ok) {
           console.log('Registration successful:', data);
-          // --- MODIFICATION STARTS HERE ---
           Alert.alert(
             'Success',
             'Registration successful! Please log in.',
@@ -102,14 +115,13 @@ export default function RegisterScreen() {
               {
                 text: 'OK',
                 onPress: () => {
-                  navigation.replace('Auth'); // Navigate ONLY after user presses OK
+                  navigation.replace('Auth');
                   console.log("Registration: Successfully registered. Navigating to Auth screen for login.");
                 }
               }
             ],
-            { cancelable: false } // Prevent dismissing by tapping outside
+            { cancelable: false }
           );
-          // --- MODIFICATION ENDS HERE ---
         } else {
           console.error('Registration error:', data);
           Alert.alert('Registration Failed', data.error || data.detail || 'An unexpected error occurred.');
@@ -122,9 +134,23 @@ export default function RegisterScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colorScheme === 'dark' ? '#1a202c' : 'transparent' }]}>
-      <View style={[styles.container, { backgroundColor: colorScheme === 'dark' ? '#2d3748' : 'rgba(255, 255, 255, 0.9)' }]}>
-        <Text style={[styles.title, { color: titleColor }]}>Register</Text>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colorScheme === 'dark' ? '#1a202c' : 'white' }]}>
+      <View style={[styles.container, { backgroundColor: colorScheme === 'dark' ? '#2d3748' : 'white' }]}>
+        <Text style={[styles.title, { color: titleColor }]}>Complete Your Registration</Text>
+
+        {preselectedUsername && (
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: labelColor }]}>Your Chosen Username:</Text>
+              <TextInput
+                  style={[
+                    styles.input,
+                    { backgroundColor: inputBackgroundColor, borderColor: inputBorderColor, color: inputTextColor, opacity: 0.7 },
+                  ]}
+                  value={preselectedUsername}
+                  editable={false}
+              />
+            </View>
+        )}
 
         <View style={styles.inputGroup}>
           <Text style={[styles.label, { color: labelColor }]}>Email:</Text>
@@ -198,7 +224,7 @@ export default function RegisterScreen() {
           {confirmPasswordError ? <Text style={[styles.errorText, { color: errorTextColor }]}>{confirmPasswordError}</Text> : null}
         </View>
 
-        <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
+        <TouchableOpacity style={[styles.registerButton, { backgroundColor: buttonPrimaryColor }]} onPress={handleRegister}>
           <Text style={styles.buttonText}>Register</Text>
         </TouchableOpacity>
 
@@ -233,6 +259,7 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: 16,
+    width: '100%',
   },
   label: {
     fontSize: 14,
@@ -242,8 +269,8 @@ const styles = StyleSheet.create({
   input: {
     borderRadius: 4,
     borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     fontSize: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -257,10 +284,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   registerButton: {
-    backgroundColor: '#22c55e',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 4,
+    borderRadius: 25,
     alignItems: 'center',
     width: '100%',
     marginTop: 8,

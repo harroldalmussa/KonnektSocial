@@ -1,12 +1,14 @@
-// App.js (at the root of your project)
+// App.js
 import * as React from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { StyleSheet, useColorScheme, Appearance } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 
-// Import the new AppNavigator from its correct location
-import AppNavigator from './screens/navigation/AppNavigator';
+import AppNavigator from './screens/navigation/AppNavigator'; 
 
 export default function App() {
   const systemColorScheme = useColorScheme();
@@ -23,7 +25,6 @@ export default function App() {
             setAppTheme(storedTheme);
           }
         } else {
-          // If no theme is stored, default to system
           setAppTheme(systemColorScheme);
         }
       } catch (error) {
@@ -56,7 +57,6 @@ export default function App() {
       colors={gradientColors}
       style={styles.gradientBackground}
     >
-      {/* NavigationContainer must wrap the top-level navigator (AppNavigator in this case) */}
       <NavigationContainer theme={navTheme}>
         <AppNavigator />
       </NavigationContainer>

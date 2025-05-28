@@ -11,20 +11,31 @@
       "image": "./assets/razom-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff",
-      "extra" : {
-        "eas" : {
+      "extra": {
+        "eas": {
           "projectId": "65bb61c9-109d-4ff8-88e6-5ad511f54559"
         }
       }
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos for moments.",
+        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to use your camera for moments.",
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to use your microphone for video moments."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
       "edgeToEdgeEnabled": true,
       "package": "com.konnektsocial.app"
     },
@@ -37,7 +48,8 @@
       }
     },
     "plugins": [
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-video"
     ]
   }
 }

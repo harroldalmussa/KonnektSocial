@@ -20,6 +20,8 @@ import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from '../main/HomeScreen';
 import ChatListScreen from '../main/ChatListScreen';
 import ProfileScreen from '../main/ProfileScreen';
+import AIScreen from '../main/AIScreen'; 
+import CreateScreen from '../main/CreateScreen';
 
 const Tab = createBottomTabNavigator();
 const ChatStack = createNativeStackNavigator();
@@ -50,10 +52,13 @@ export default function MainTabs() {
             iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'Chat') {
             iconName = focused ? 'chatbox' : 'chatbox-outline';
-          } else if (route.name === 'Profile') { // Adjusted logic for Profile
+          } else if (route.name === 'Create') {
+            iconName = focused ? 'add-circle' : 'add-circle-outline';
+          } else if (route.name === 'AI') {
+            iconName = focused ? 'sparkles' : 'sparkles-outline';
+          } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           }
-          // The 'Create' tab is no longer here, so no icon logic is needed for it.
           return <Ionicons name={iconName} size={25} color={color} />;
         },
         tabBarActiveTintColor: activeTintColor,
@@ -90,7 +95,8 @@ export default function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Chat" component={ChatFlow} />
-      {/* <Tab.Screen name="Create" component={CreatePostScreen} /> */}
+      <Tab.Screen name="Create" component={CreateScreen} />
+      <Tab.Screen name="AI" component={AIScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );

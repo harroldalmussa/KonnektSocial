@@ -10,20 +10,20 @@ import {
   Alert,
   Platform,
   useColorScheme,
-  ScrollView, // Ensure ScrollView is imported
+  ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174'; // !!! IMPORTANT: REPLACE WITH YOUR ACTUAL LOCAL IP ADDRESS !!!
+const YOUR_LOCAL_IP_ADDRESS = '****'; 
 
 export default function AddContactScreen() {
   const navigation = useNavigation();
   const colorScheme = useColorScheme();
 
   const [contactEmail, setContactEmail] = useState('');
-  const [contactName, setContactName] = useState(''); // Not strictly used by backend add endpoint but good for UX
+  const [contactName, setContactName] = useState(''); 
   const [emailError, setEmailError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -53,24 +53,20 @@ export default function AddContactScreen() {
         setLoading(false);
         return;
       }
-      // First, search for the user by email to get their ID
       const searchResponse = await fetch(`http://192.168.1.174:8081/users/search?q=${encodeURIComponent(contactEmail.trim())}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
       const searchData = await searchResponse.json();
-
-      // Check if search was successful and users array exists and has at least one user
       if (!searchResponse.ok || !Array.isArray(searchData.users) || searchData.users.length === 0) {
         Alert.alert('Error', searchData.error || 'User not found. Please check the email.');
         setLoading(false);
         return;
       }
 
-      const userToAdd = searchData.users[0]; // Assuming first result is the one we want
+      const userToAdd = searchData.users[0];
 
-      // Then, add the contact using their ID
       const addContactResponse = await fetch(`http://${YOUR_LOCAL_IP_ADDRESS}:8081/contacts`, {
         method: 'POST',
         headers: {
@@ -83,7 +79,7 @@ export default function AddContactScreen() {
 
       if (addContactResponse.ok) {
         Alert.alert('Success', addContactData.message || 'Contact added!');
-        navigation.goBack(); // Go back to NewChatScreen to see updated list
+        navigation.goBack(); 
       } else {
         Alert.alert('Error', addContactData.error || 'Failed to add contact.');
       }
@@ -133,7 +129,7 @@ export default function AddContactScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.addButton, { backgroundColor: loading ? '#6b7280' : '#22c55e' }]} // Grey out when loading
+            style={[styles.addButton, { backgroundColor: loading ? '#6b7280' : '#22c55e' }]} 
             onPress={handleAddContact}
             disabled={loading}
           >
@@ -152,7 +148,6 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    // Removed borderTopLeftRadius: 30, borderTopRightRadius: 30,
     marginTop: Platform.OS === 'android' ? 30 : 0,
     overflow: 'hidden',
   },

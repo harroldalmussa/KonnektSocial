@@ -16,29 +16,27 @@ import {
   useColorScheme,
   ActivityIndicator,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useIsFocused } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import io from 'socket.io-client'; // Import socket.io-client
+import io from 'socket.io-client';
 
-// Define some color options for chat background
 const chatBackgroundColors = {
   purple: ['#5b4285', '#7f58a7'],
-  darkPurple: ['#3a0050', '#1a0028'], // Darker purple gradient
+  darkPurple: ['#3a0050', '#1a0028'],
   blue: ['#3B82F6', '#60a5fa'],
-  ivoryCream: ['#f5f5dc', '#fffafa'], // Creamy white to almost white
+  ivoryCream: ['#f5f5dc', '#fffafa'],
   green: ['#10b981', '#34d399'],
 };
 
-// Define your backend WebSocket URL
-// Make sure this matches your backend's IP and port
-const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174'; // IMPORTANT: Use your actual local IP
+const YOUR_LOCAL_IP_ADDRESS = '192.168.1.174';
 const SOCKET_SERVER_URL = `http://${YOUR_LOCAL_IP_ADDRESS}:3000`;
 
 export default function ChatWindowScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const isFocused = useIsFocused();
   const { chatId, user: recipientName, email: recipientEmail, img: recipientImg } = route.params || {};
 
   const colorScheme = useColorScheme();
@@ -50,7 +48,7 @@ export default function ChatWindowScreen() {
   const [currentUserData, setCurrentUserData] = useState(null);
 
   const scrollViewRef = useRef();
-  const socketRef = useRef(null); // Ref to hold the socket instance
+  const socketRef = useRef(null);
 
   const receivedBubbleBg = colorScheme === 'dark' ? '#374151' : 'white';
   const receivedMessageTextColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937';
@@ -60,7 +58,6 @@ export default function ChatWindowScreen() {
   const headerTitleColor = colorScheme === 'dark' ? '#f7fafc' : '#1f2937';
   const headerStatusColor = colorScheme === 'dark' ? '#cbd5e0' : '#4b5563';
 
-  // Function to fetch messages (initial load)
   const fetchMessages = useCallback(async () => {
     if (!chatId) {
       console.warn('No chatId provided to ChatWindowScreen.');
@@ -127,49 +124,64 @@ export default function ChatWindowScreen() {
     };
     loadDefaultWallpaper();
 
-    // --- WebSocket Setup ---
-    socketRef.current = io(SOCKET_SERVER_URL);
+    const setupWebSocket = async () => {
+      if (!isFocused || socketRef.current) return;
 
-    socketRef.current.on('connect', () => {
-      console.log('Connected to WebSocket server');
-      // After connecting, join the specific chat room
-      if (chatId) {
-        socketRef.current.emit('join_chat', chatId);
+      const storedToken = await AsyncStorage.getItem('access_token');
+      if (!storedToken) {
+        console.warn('No access token for WebSocket, skipping connection.');
+        return;
       }
-    });
 
-    socketRef.current.on('receiveMessage', (newMessage) => {
-      console.log('Received new message via WebSocket:', newMessage);
-      // Update state with the new message, ensuring it's not a duplicate
-      setMessages((prevMessages) => {
-        // Prevent duplicates if the message was also added by the REST response
-        if (prevMessages.some(msg => msg.id === newMessage.id)) {
-          return prevMessages;
-        }
-        return [...prevMessages, newMessage].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      socketRef.current = io(SOCKET_SERVER_URL, {
+        auth: {
+          token: storedToken
+        },
+        transports: ['websocket']
       });
-    });
 
-    socketRef.current.on('disconnect', () => {
-      console.log('Disconnected from WebSocket server');
-    });
+      socketRef.current.on('connect', () => {
+        console.log('Connected to WebSocket server');
+        if (chatId) {
+          socketRef.current.emit('join_chat', chatId);
+        }
+      });
 
-    socketRef.current.on('connect_error', (error) => {
-      console.error('WebSocket connection error:', error.message);
-      Alert.alert('WebSocket Error', `Could not connect to chat server: ${error.message}`);
-    });
+      socketRef.current.on('receiveMessage', (newMessage) => {
+        console.log('Received new message via WebSocket:', newMessage);
+        setMessages((prevMessages) => {
+          if (prevMessages.some(msg => msg.id === newMessage.id)) {
+            return prevMessages.map(msg =>
+              msg.id === newMessage.id ? { ...newMessage, status: 'sent' } : msg
+            ).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+          }
+          return [...prevMessages, newMessage].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        });
+      });
 
-    // Fetch initial messages when the component mounts
-    fetchMessages();
+      socketRef.current.on('disconnect', () => {
+        console.log('Disconnected from WebSocket server');
+      });
 
-    // Cleanup function: disconnect from WebSocket when component unmounts
+      socketRef.current.on('connect_error', (error) => {
+        console.error('WebSocket connection error:', error.message);
+        Alert.alert('WebSocket Error', `Could not connect to chat server: ${error.message}`);
+      });
+    };
+
+    if (isFocused) {
+      setupWebSocket();
+      fetchMessages();
+    }
+
     return () => {
-      if (socketRef.current) {
-        console.log('Disconnecting WebSocket on unmount');
+      if (socketRef.current && socketRef.current.connected) {
+        console.log('Disconnecting WebSocket on unmount/unfocus');
         socketRef.current.disconnect();
+        socketRef.current = null;
       }
     };
-  }, [fetchMessages, colorScheme, chatId]); // Added chatId to dependencies for socket connection
+  }, [fetchMessages, colorScheme, chatId, isFocused]);
 
   useEffect(() => {
     if (scrollViewRef.current) {
@@ -199,8 +211,24 @@ export default function ChatWindowScreen() {
     }
 
     const messageToSend = messageText.trim();
-    setMessageText(''); // Clear input immediately for better UX
+    setMessageText('');
     Keyboard.dismiss();
+
+    const tempMessageId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const optimisticMessage = {
+      id: tempMessageId,
+      chat_id: chatId,
+      sender_id: currentUserData.uid,
+      text: messageToSend,
+      timestamp: new Date().toISOString(),
+      status: 'sending',
+    };
+
+    setMessages((prevMessages) =>
+      [...prevMessages, optimisticMessage].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      )
+    );
 
     try {
       const storedToken = await AsyncStorage.getItem('access_token');
@@ -218,19 +246,24 @@ export default function ChatWindowScreen() {
       const data = await response.json();
 
       if (response.ok) {
-        // Message was sent and backend should have broadcasted it via WebSocket.
-        // The 'receiveMessage' listener will handle updating the UI.
         console.log('Message sent via REST API:', data.data);
       } else {
         console.error('Failed to send message via REST:', data);
         Alert.alert('Error', data.detail || 'Failed to send message.');
-        // Re-add the message text if sending failed
-        setMessageText(messageToSend);
+        setMessages((prevMessages) =>
+          prevMessages.map((msg) =>
+            msg.id === tempMessageId ? { ...msg, status: 'failed' } : msg
+          )
+        );
       }
     } catch (error) {
       console.error('Network or API Error sending message:', error);
       Alert.alert('Error', `Network or API Error: ${error.message || 'Unknown error'}.`);
-      setMessageText(messageToSend); // Re-add message text on network error
+      setMessages((prevMessages) =>
+        prevMessages.map((msg) =>
+          msg.id === tempMessageId ? { ...msg, status: 'failed' } : msg
+        )
+      );
     }
   };
 
@@ -239,28 +272,18 @@ export default function ChatWindowScreen() {
     const bubbleStyle = isMyMessage ? styles.sentMessageBubble : [styles.receivedMessageBubble, { backgroundColor: receivedBubbleBg }];
     const textStyle = isMyMessage ? styles.sentMessageText : [styles.receivedMessageText, { color: receivedMessageTextColor }];
 
-    // Example for file messages (you'd need backend support for file uploads)
-    if (message.type === 'file') {
-      return (
-        <View key={message.id} style={bubbleStyle}>
-          <Ionicons name="document-text-outline" size={20} color={isMyMessage ? 'white' : receivedMessageTextColor} style={styles.fileIcon} />
-          <View>
-            <Text style={textStyle}>{message.text}</Text>
-            <Text style={[styles.fileSizeText, { color: fileDetailsColor }]}>{message.fileSize}</Text>
-          </View>
-          <TouchableOpacity style={styles.downloadIconContainer}>
-            <Ionicons name="download-outline" size={20} color={isMyMessage ? 'white' : receivedMessageTextColor} />
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
     return (
       <View key={message.id} style={bubbleStyle}>
         <Text style={textStyle}>{message.text}</Text>
         <Text style={[styles.messageTimestamp, { color: isMyMessage ? 'rgba(255,255,255,0.7)' : fileDetailsColor }]}>
           {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </Text>
+        {message.status === 'sending' && (
+          <ActivityIndicator size="small" color={isMyMessage ? 'rgba(255,255,255,0.7)' : fileDetailsColor} style={{ marginLeft: 5 }} />
+        )}
+        {message.status === 'failed' && (
+          <Ionicons name="alert-circle" size={16} color="red" style={{ marginLeft: 5 }} />
+        )}
       </View>
     );
   };
@@ -454,8 +477,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
-    flexDirection: 'row', // Added for timestamp alignment
-    alignItems: 'flex-end', // Align text and timestamp
+    flexDirection: 'row',
+    alignItems: 'flex-end',
   },
   receivedMessageBubble: {
     alignSelf: 'flex-start',
@@ -470,17 +493,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
-    flexDirection: 'row', // Added for timestamp alignment
-    alignItems: 'flex-end', // Align text and timestamp
+    flexDirection: 'row',
+    alignItems: 'flex-end',
   },
   sentMessageText: {
     fontSize: 15,
     color: 'white',
-    marginRight: 8, // Space for timestamp
+    marginRight: 8,
   },
   receivedMessageText: {
     fontSize: 15,
-    marginRight: 8, // Space for timestamp
+    marginRight: 8,
   },
   messageTimestamp: {
     fontSize: 10,
